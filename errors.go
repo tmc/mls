@@ -145,3 +145,14 @@ var ErrUnsupportedCapability = errors.New("mls: unsupported capability")
 // ErrUnsupportedVersion is reported for a protocol version other than
 // mls10.
 var ErrUnsupportedVersion = errors.New("mls: unsupported protocol version")
+
+// ErrBadExternalCommit is reported for a commit from a new member
+// that does not meet the rules of RFC 9420, Section 12.4.3.2: it must
+// carry an update path and exactly one ExternalInit proposal, and it
+// must not refer to proposals by reference or carry any proposal but
+// ExternalInit, Remove and PreSharedKey.
+var ErrBadExternalCommit = errors.New("mls: malformed external commit")
+
+// ErrNoExternalPub is reported for a GroupInfo that an external join
+// cannot use because it has no external_pub extension.
+var ErrNoExternalPub = errors.New("mls: group info has no external_pub extension")

@@ -445,3 +445,31 @@ func (cs CipherSuite) PublicKey(priv []byte) (HPKEPublicKey, error) {
 	}
 	return key.PublicKey().Bytes(), nil
 }
+
+// ExternalInit generates the init secret for an epoch begun by an
+// external commit, along with the KEM output that lets the members of
+// the group derive the same secret from their external key pair.
+// See RFC 9420, Section 8.3.
+func (cs CipherSuite) ExternalInit(externalPub HPKEPublicKey) (kemOutput, initSecret []byte, err error) {
+	p, err := cs.params()
+	if err != nil {
+		return nil, nil, err
+	}
+	key, err := hpke.DHKEM(p.curve).NewPublicKey(externalPub)
+	if err != nil {
+		return nil, nil, err
+	}
+	enc, sender, err := hpke.NewSender(key, p.kdf(), p.aead(), nil)
+	if err != nil {
+		return nil, nil, err
+	}
+	secret, err := sender.Export(externalInitLabel, cs.HashSize())
+	if err != nil {
+		return nil, nil, err
+	}
+	return enc, secret, nil
+}
+
+// externalInitLabel is the HPKE exporter context that both sides of
+// an external commit derive the init secret under.
+const externalInitLabel = "MLS 1.0 external init secret"

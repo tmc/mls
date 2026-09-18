@@ -183,3 +183,23 @@ func (cs CipherSuite) WelcomeSecret(joinerSecret, pskSecret []byte) ([]byte, err
 	}
 	return cs.DeriveSecret(member, "welcome")
 }
+
+// ExternalInit derives the init secret an external joiner sent in the
+// kem_output of its ExternalInit proposal. It is the counterpart of
+// [CipherSuite.ExternalInit]. See RFC 9420, Section 8.3.
+func (ks *KeySchedule) ExternalInit(kemOutput []byte) ([]byte, error) {
+	cs := ks.CipherSuite
+	p, err := cs.params()
+	if err != nil {
+		return nil, err
+	}
+	key, err := hpke.DHKEM(p.curve).DeriveKeyPair(ks.ExternalSecret)
+	if err != nil {
+		return nil, err
+	}
+	r, err := hpke.NewRecipient(kemOutput, key, p.kdf(), p.aead(), nil)
+	if err != nil {
+		return nil, err
+	}
+	return r.Export(externalInitLabel, cs.HashSize())
+}

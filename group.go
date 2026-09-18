@@ -221,14 +221,26 @@ func (g *Group) Unprotect(m *MLSMessage) (*AuthenticatedContent, error) {
 	if c.Content.Epoch != g.Context.Epoch || !bytes.Equal(c.Content.GroupID, g.Context.GroupID) {
 		return nil, ErrNotForGroup
 	}
-	if c.Content.Sender.Type != SenderTypeMember {
+	var key SignaturePublicKey
+	switch c.Content.Sender.Type {
+	case SenderTypeMember:
+		leaf := g.Tree.Leaf(LeafIndex(c.Content.Sender.LeafIndex))
+		if leaf == nil {
+			return nil, ErrNotMember
+		}
+		key = leaf.SignatureKey
+	case SenderTypeNewMemberCommit:
+		// An external commit is signed by the joiner, whose key
+		// is in the leaf node of the update path it carries.
+		// See RFC 9420, Section 6.1.
+		if c.Content.ContentType != ContentTypeCommit || c.Content.Commit.Path == nil {
+			return nil, ErrBadExternalCommit
+		}
+		key = c.Content.Commit.Path.LeafNode.SignatureKey
+	default:
 		return nil, ErrNotMember
 	}
-	leaf := g.Tree.Leaf(LeafIndex(c.Content.Sender.LeafIndex))
-	if leaf == nil {
-		return nil, ErrNotMember
-	}
-	if err := c.Verify(cs, leaf.SignatureKey, g.Context.Version, &g.Context); err != nil {
+	if err := c.Verify(cs, key, g.Context.Version, &g.Context); err != nil {
 		return nil, err
 	}
 	return c, nil
@@ -330,6 +342,12 @@ func (g *Group) ApplyCommit(c *AuthenticatedContent) (*Group, error) {
 		return nil, ErrNotCommit
 	}
 	commit := c.Content.Commit
+	external := c.Content.Sender.Type == SenderTypeNewMemberCommit
+	if external {
+		if err := externalCommitOK(commit); err != nil {
+			return nil, err
+		}
+	}
 	sender := LeafIndex(c.Content.Sender.LeafIndex)
 	proposals, err := g.resolve(commit)
 	if err != nil {
@@ -353,9 +371,18 @@ func (g *Group) ApplyCommit(c *AuthenticatedContent) (*Group, error) {
 	next.Secrets = NewTreeSecrets(g.Index, g.Secrets.Leaf)
 	maps.Copy(next.Secrets.Secrets, g.Secrets.Secrets)
 
-	added, psks, err := next.apply(proposals)
+	ch, err := next.apply(proposals)
 	if err != nil {
 		return nil, err
+	}
+	if external {
+		// The joiner takes the leftmost free leaf, as an Add
+		// would give it. See RFC 9420, Section 12.4.3.2.
+		if ch.kemOutput == nil {
+			return nil, ErrBadExternalCommit
+		}
+		leaf := commit.Path.LeafNode
+		sender = next.Tree.Add(&leaf)
 	}
 	if next.Tree.Leaf(g.Index) == nil {
 		return nil, ErrRemoved
@@ -369,7 +396,7 @@ func (g *Group) ApplyCommit(c *AuthenticatedContent) (*Group, error) {
 	// one, and is otherwise all zero.
 	commitSecret := make([]byte, cs.HashSize())
 	if commit.Path != nil {
-		if sender == g.Index {
+		if sender == g.Index && !external {
 			return nil, ErrOwnCommit
 		}
 		if err := next.Tree.MergeUpdatePath(cs, sender, commit.Path); err != nil {
@@ -379,7 +406,7 @@ func (g *Group) ApplyCommit(c *AuthenticatedContent) (*Group, error) {
 			return nil, err
 		}
 		next.Secrets.prune(cs, next.Tree)
-		commitSecret, err = next.Tree.DecryptPathSecrets(cs, sender, commit.Path, &next.Context, next.Secrets, added)
+		commitSecret, err = next.Tree.DecryptPathSecrets(cs, sender, commit.Path, &next.Context, next.Secrets, ch.added)
 		if err != nil {
 			return nil, err
 		}
@@ -393,11 +420,19 @@ func (g *Group) ApplyCommit(c *AuthenticatedContent) (*Group, error) {
 		return nil, err
 	}
 
-	pskSecret, err := g.client.pskSecret(psks, g)
+	pskSecret, err := g.client.pskSecret(ch.psks, g)
 	if err != nil {
 		return nil, err
 	}
-	joiner, err := cs.JoinerSecret(g.Schedule.InitSecret, commitSecret, &next.Context)
+	// An external commit replaces the previous epoch's init secret
+	// with one the joiner sent. See RFC 9420, Section 8.3.
+	initSecret := g.Schedule.InitSecret
+	if external {
+		if initSecret, err = g.Schedule.ExternalInit(ch.kemOutput); err != nil {
+			return nil, err
+		}
+	}
+	joiner, err := cs.JoinerSecret(initSecret, commitSecret, &next.Context)
 	if err != nil {
 		return nil, err
 	}
@@ -422,11 +457,19 @@ func (g *Group) ApplyCommit(c *AuthenticatedContent) (*Group, error) {
 	return next, nil
 }
 
+// changes is what applying a commit's proposals did to a group,
+// beyond the tree itself.
+type changes struct {
+	added     []LeafIndex      // leaves added, which receive no path secret
+	psks      []PreSharedKeyID // pre-shared keys the commit injects
+	kemOutput []byte           // set by an ExternalInit proposal
+}
+
 // apply applies a commit's proposals to the tree and the group
 // context of the new epoch, in the order RFC 9420, Section 12.3
-// prescribes. It returns the leaves that were added, which receive no
-// path secret, and the pre-shared keys the commit injects.
-func (g *Group) apply(proposals []proposal) (added []LeafIndex, psks []PreSharedKeyID, err error) {
+// prescribes.
+func (g *Group) apply(proposals []proposal) (*changes, error) {
+	var ch changes
 	for _, p := range proposals {
 		if p.Type == ProposalTypeGroupContextExtensions {
 			g.Context.Extensions = p.GroupContextExtensions.Extensions
@@ -437,15 +480,15 @@ func (g *Group) apply(proposals []proposal) (added []LeafIndex, psks []PreShared
 			leaf := p.Update.LeafNode
 			old := g.Tree.Leaf(p.sender)
 			if old == nil {
-				return nil, nil, ErrLeafRange
+				return nil, ErrLeafRange
 			}
 			// An update must change the leaf's encryption key;
 			// otherwise it gives the group no new secrecy.
 			if bytes.Equal(old.EncryptionKey, leaf.EncryptionKey) {
-				return nil, nil, ErrDuplicateLeafKey
+				return nil, ErrDuplicateLeafKey
 			}
 			if err := g.Tree.validateLeafInGroup(g.CipherSuite, &leaf, p.sender, &g.Context, LeafNodeSourceUpdate); err != nil {
-				return nil, nil, err
+				return nil, err
 			}
 			g.Tree.Update(p.sender, &leaf)
 		}
@@ -453,7 +496,7 @@ func (g *Group) apply(proposals []proposal) (added []LeafIndex, psks []PreShared
 	for _, p := range proposals {
 		if p.Type == ProposalTypeRemove {
 			if g.Tree.Leaf(LeafIndex(p.Remove.Removed)) == nil {
-				return nil, nil, ErrLeafRange
+				return nil, ErrLeafRange
 			}
 			g.Tree.Remove(LeafIndex(p.Remove.Removed))
 		}
@@ -462,26 +505,31 @@ func (g *Group) apply(proposals []proposal) (added []LeafIndex, psks []PreShared
 		switch p.Type {
 		case ProposalTypeAdd:
 			if p.Add.KeyPackage.CipherSuite != g.CipherSuite {
-				return nil, nil, ErrUnsupportedCipherSuite
+				return nil, ErrUnsupportedCipherSuite
 			}
 			// The lifetime is not checked here: a key package
 			// may expire between being sent and being applied,
 			// and RFC 9420, Section 7.3 only recommends the
 			// check on the receiving side.
 			if err := p.Add.KeyPackage.Validate(time.Time{}); err != nil {
-				return nil, nil, err
+				return nil, err
 			}
 			leaf := p.Add.KeyPackage.LeafNode
 			i := g.Tree.Add(&leaf)
 			if err := g.Tree.validateLeafInGroup(g.CipherSuite, &leaf, i, &g.Context, LeafNodeSourceKeyPackage); err != nil {
-				return nil, nil, err
+				return nil, err
 			}
-			added = append(added, i)
+			ch.added = append(ch.added, i)
 		case ProposalTypePreSharedKey:
-			psks = append(psks, p.PreSharedKey.PSK)
-		case ProposalTypeExternalInit, ProposalTypeReInit:
-			return nil, nil, ErrUnsupportedProposal
+			ch.psks = append(ch.psks, p.PreSharedKey.PSK)
+		case ProposalTypeExternalInit:
+			if ch.kemOutput != nil {
+				return nil, ErrBadExternalCommit
+			}
+			ch.kemOutput = p.ExternalInit.KEMOutput
+		case ProposalTypeReInit:
+			return nil, ErrUnsupportedProposal
 		}
 	}
-	return added, psks, nil
+	return &ch, nil
 }

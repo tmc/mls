@@ -29,7 +29,8 @@ it the package implements the cipher suites (over the Go 1.27
 `crypto/hpke` package), the key schedule, the secret tree and its
 ratchets, transcript hashes, signatures and hash references, message
 framing and protection, the ratchet tree with its hashes and parent
-hashes, TreeKEM update paths, and the group state machine.
+hashes, TreeKEM update paths, the group state machine, and external
+joins.
 
 ```go
 alice, err := mls.NewClient(cs, cred, 24*time.Hour)
@@ -45,7 +46,7 @@ nor `x/crypto` provides, and report `ErrUnsupportedCipherSuite`. Suite
 library exposes only through HPKE, so that one algorithm comes from
 `golang.org/x/crypto/chacha20poly1305`; everything else is stdlib.
 
-Not implemented: external commits, external joins, and reinitialization.
+Not implemented: reinitialization.
 
 The `multicred` subpackage implements the multi-credential and
 weak multi-credential types of draft-ietf-mls-extensions, registered

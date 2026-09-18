@@ -145,17 +145,27 @@ func (g *Group) Propose(p *Proposal) (*MLSMessage, error) {
 // The commit always updates the committer's direct path, which RFC
 // 9420, Section 12.4 requires unless every proposal is an Add.
 func (g *Group) Commit(extra []*Proposal) (*Group, *MLSMessage, *MLSMessage, error) {
+	return g.commit(extra, SenderTypeMember)
+}
+
+// commit builds a commit from the proposals g has seen and the extra
+// proposals given, as a member or as a new member joining by external
+// commit. The two differ in who signs the commit and in how the new
+// epoch's init secret is reached, and not in anything below that.
+func (g *Group) commit(extra []*Proposal, sender SenderType) (*Group, *MLSMessage, *MLSMessage, error) {
 	cs := g.CipherSuite
 	commit := &Commit{}
 	proposals := make([]proposal, 0, len(g.proposals)+len(extra))
-	for _, ref := range slices.Sorted(maps.Keys(g.proposals)) {
-		c := g.proposals[ref]
-		r, err := c.Ref(cs)
-		if err != nil {
-			return nil, nil, nil, err
+	if sender == SenderTypeMember {
+		for _, ref := range slices.Sorted(maps.Keys(g.proposals)) {
+			c := g.proposals[ref]
+			r, err := c.Ref(cs)
+			if err != nil {
+				return nil, nil, nil, err
+			}
+			commit.Proposals = append(commit.Proposals, ProposalOrRef{Type: ProposalOrRefTypeReference, Reference: r})
+			proposals = append(proposals, proposal{c.Content.Proposal, LeafIndex(c.Content.Sender.LeafIndex)})
 		}
-		commit.Proposals = append(commit.Proposals, ProposalOrRef{Type: ProposalOrRefTypeReference, Reference: r})
-		proposals = append(proposals, proposal{c.Content.Proposal, LeafIndex(c.Content.Sender.LeafIndex)})
 	}
 	now := time.Now()
 	for _, p := range extra {
@@ -169,6 +179,11 @@ func (g *Group) Commit(extra []*Proposal) (*Group, *MLSMessage, *MLSMessage, err
 		commit.Proposals = append(commit.Proposals, ProposalOrRef{Type: ProposalOrRefTypeProposal, Proposal: p})
 		proposals = append(proposals, proposal{p, g.Index})
 	}
+	if sender == SenderTypeNewMemberCommit {
+		if err := externalProposalsOK(commit); err != nil {
+			return nil, nil, nil, err
+		}
+	}
 
 	next := &Group{
 		CipherSuite: cs,
@@ -179,12 +194,22 @@ func (g *Group) Commit(extra []*Proposal) (*Group, *MLSMessage, *MLSMessage, err
 		proposals:   make(map[string]*AuthenticatedContent),
 		resumption:  maps.Clone(g.resumption),
 	}
-	added, psks, err := next.apply(proposals)
+	ch, err := next.apply(proposals)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 	if next.Tree.Leaf(g.Index) == nil {
 		return nil, nil, nil, ErrRemoved
+	}
+	// A resync commit removes the joiner's prior leaf, which may
+	// have been to the left of the one it just took; the joiner
+	// moves into the leftmost free leaf as the members will place
+	// it when they apply the commit.
+	if sender == SenderTypeNewMemberCommit {
+		leaf := *next.Tree.Leaf(g.Index)
+		next.Tree.Remove(g.Index)
+		next.Index = next.Tree.Add(&leaf)
+		next.Secrets = NewTreeSecrets(next.Index, g.Secrets.Leaf)
 	}
 	next.Context.Epoch = g.Context.Epoch + 1
 
@@ -196,7 +221,7 @@ func (g *Group) Commit(extra []*Proposal) (*Group, *MLSMessage, *MLSMessage, err
 	if _, err := rand.Read(leafSecret); err != nil {
 		return nil, nil, nil, err
 	}
-	path, secrets, commitSecret, err := next.Tree.CreateUpdatePath(cs, g.Index, leafSecret, g.client.SignaturePriv, &next.Context, added)
+	path, secrets, commitSecret, err := next.Tree.CreateUpdatePath(cs, next.Index, leafSecret, g.client.SignaturePriv, &next.Context, ch.added)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -208,12 +233,16 @@ func (g *Group) Commit(extra []*Proposal) (*Group, *MLSMessage, *MLSMessage, err
 
 	// Sign the commit, which the transcript hash then covers, and
 	// derive the new epoch's secrets from it.
+	from := Sender{Type: sender}
+	if sender == SenderTypeMember {
+		from.LeafIndex = uint32(g.Index)
+	}
 	c := &AuthenticatedContent{
 		WireFormat: WireFormatPublicMessage,
 		Content: FramedContent{
 			GroupID:     g.Context.GroupID,
 			Epoch:       g.Context.Epoch,
-			Sender:      Sender{Type: SenderTypeMember, LeafIndex: uint32(g.Index)},
+			Sender:      from,
 			ContentType: ContentTypeCommit,
 			Commit:      commit,
 		},
@@ -225,7 +254,7 @@ func (g *Group) Commit(extra []*Proposal) (*Group, *MLSMessage, *MLSMessage, err
 	if next.Context.ConfirmedTranscriptHash, err = cs.ConfirmedTranscriptHash(g.interim, c); err != nil {
 		return nil, nil, nil, err
 	}
-	pskSecret, err := g.client.pskSecret(psks, g)
+	pskSecret, err := g.client.pskSecret(ch.psks, g)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -251,7 +280,7 @@ func (g *Group) Commit(extra []*Proposal) (*Group, *MLSMessage, *MLSMessage, err
 	}
 	msg := &MLSMessage{Version: g.Context.Version, WireFormat: WireFormatPublicMessage, PublicMessage: pm}
 
-	welcome, err := next.welcome(c.Auth.ConfirmationTag, proposals, added, psks)
+	welcome, err := next.welcome(c.Auth.ConfirmationTag, proposals, ch.added, ch.psks)
 	if err != nil {
 		return nil, nil, nil, err
 	}
