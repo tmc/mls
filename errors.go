@@ -168,3 +168,17 @@ var ErrProposalList = errors.New("mls: invalid proposal list")
 // type an external sender may not send, or that is encrypted, which a
 // non-member cannot do.
 var ErrBadExternalSender = errors.New("mls: malformed external proposal")
+
+// ErrNotReInitialized is reported by [Group.Reinitialize] for a group
+// whose members have not committed a ReInit proposal.
+var ErrNotReInitialized = errors.New("mls: group has not been reinitialized")
+
+// ErrNotResumed is reported by [Client.Resume] for a welcome message
+// that does not carry the group it names into a new one, as RFC 9420,
+// Sections 11.2 and 11.3 require.
+var ErrNotResumed = errors.New("mls: group does not resume the one given")
+
+// ErrReInitialized is reported for a group that has committed a
+// ReInit proposal, which ends it: its members move to the group
+// [Group.Reinitialize] creates. See RFC 9420, Section 11.2.
+var ErrReInitialized = errors.New("mls: group has been reinitialized")

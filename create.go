@@ -111,6 +111,9 @@ func (c *Client) NewGroup(groupID []byte, extensions Extensions) (*Group, error)
 // another member that receives the message - can refer to it by
 // reference.
 func (g *Group) Propose(p *Proposal) (*MLSMessage, error) {
+	if g.reinit != nil {
+		return nil, ErrReInitialized
+	}
 	c := &AuthenticatedContent{
 		WireFormat: WireFormatPublicMessage,
 		Content: FramedContent{
@@ -153,6 +156,9 @@ func (g *Group) Commit(extra []*Proposal) (*Group, *MLSMessage, *MLSMessage, err
 // commit. The two differ in who signs the commit and in how the new
 // epoch's init secret is reached, and not in anything below that.
 func (g *Group) commit(extra []*Proposal, sender SenderType) (*Group, *MLSMessage, *MLSMessage, error) {
+	if g.reinit != nil {
+		return nil, nil, nil, ErrReInitialized
+	}
 	cs := g.CipherSuite
 	commit := &Commit{}
 	from := Sender{Type: sender}
@@ -199,11 +205,14 @@ func (g *Group) commit(extra []*Proposal, sender SenderType) (*Group, *MLSMessag
 		client:      g.client,
 		proposals:   make(map[string]*AuthenticatedContent),
 		resumption:  maps.Clone(g.resumption),
+		prior:       g.prior,
+		resumed:     g.resumed,
 	}
 	ch, err := next.apply(proposals)
 	if err != nil {
 		return nil, nil, nil, err
 	}
+	next.reinit = ch.reinit
 	if next.Tree.Leaf(g.Index) == nil {
 		return nil, nil, nil, ErrRemoved
 	}

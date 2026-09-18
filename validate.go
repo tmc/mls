@@ -178,7 +178,7 @@ func (t RatchetTree) validateProposals(ps []proposal, committer LeafIndex, ctx *
 
 		case ProposalTypePreSharedKey:
 			id := p.PreSharedKey.PSK
-			if id.Type == PSKTypeResumption {
+			if id.Type == PSKTypeResumption && ctx.Epoch != 0 {
 				switch id.Usage {
 				case ResumptionPSKUsageReInit, ResumptionPSKUsageBranch:
 					// Sections 11.2 and 11.3: these

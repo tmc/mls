@@ -42,6 +42,9 @@ type Group struct {
 	keys       *SecretTree
 	proposals  map[string]*AuthenticatedContent // by proposal reference
 	resumption map[uint64][]byte                // resumption PSKs, by epoch
+	prior      *Group                           // the group this one was resumed from
+	resumed    *PreSharedKeyID                  // the key that links it to prior
+	reinit     *ReInit                          // set by a commit that reinitializes
 }
 
 // EpochAuthenticator is the value that members compare out of band to
@@ -57,6 +60,13 @@ func (g *Group) Epoch() uint64 { return g.Context.Epoch }
 // ratchet_tree extension, and otherwise must be supplied in tree.
 // See RFC 9420, Section 12.4.3.1.
 func (c *Client) Join(w *Welcome, tree RatchetTree) (*Group, error) {
+	return c.join(w, tree, nil)
+}
+
+// join builds a member's view of a group from a welcome message. old
+// is the group the new one was resumed from, if any, whose resumption
+// keys the welcome may draw on; see [Client.Resume].
+func (c *Client) join(w *Welcome, tree RatchetTree, old *Group) (*Group, error) {
 	cs := c.CipherSuite
 	if w.CipherSuite != cs {
 		return nil, ErrUnsupportedCipherSuite
@@ -69,7 +79,7 @@ func (c *Client) Join(w *Welcome, tree RatchetTree) (*Group, error) {
 	if err != nil {
 		return nil, err
 	}
-	pskSecret, err := c.pskSecret(secrets.PSKs, nil)
+	pskSecret, err := c.pskSecret(secrets.PSKs, old)
 	if err != nil {
 		return nil, err
 	}
@@ -151,6 +161,12 @@ func (c *Client) Join(w *Welcome, tree RatchetTree) (*Group, error) {
 		keys:        NewSecretTree(cs, tree.Size(), schedule.EncryptionSecret),
 		proposals:   make(map[string]*AuthenticatedContent),
 		resumption:  map[uint64][]byte{info.GroupContext.Epoch: schedule.ResumptionPSK},
+		prior:       old,
+	}
+	for i := range secrets.PSKs {
+		if id := secrets.PSKs[i]; id.Type == PSKTypeResumption && id.Usage != ResumptionPSKUsageApplication {
+			g.resumed = &secrets.PSKs[i]
+		}
 	}
 	return g, nil
 }
@@ -180,12 +196,8 @@ func (c *Client) pskSecret(ids []PreSharedKeyID, g *Group) ([]byte, error) {
 	psks := make([][]byte, len(ids))
 	for i, id := range ids {
 		switch {
-		case id.Type == PSKTypeResumption && g != nil && bytes.Equal(id.PSKGroupID, g.Context.GroupID):
-			psk, ok := g.resumption[id.PSKEpoch]
-			if !ok {
-				return nil, ErrUnknownPSK
-			}
-			psks[i] = psk
+		case id.Type == PSKTypeResumption && g.resumptionPSK(id) != nil:
+			psks[i] = g.resumptionPSK(id)
 		case c.PSK != nil:
 			psk, err := c.PSK(id)
 			if err != nil {
@@ -365,6 +377,9 @@ func (g *Group) resolve(commit *Commit, committer Sender) ([]proposal, error) {
 // group's state in the epoch the commit begins. g is left unchanged.
 // See RFC 9420, Section 12.4.2.
 func (g *Group) ApplyCommit(c *AuthenticatedContent) (*Group, error) {
+	if g.reinit != nil {
+		return nil, ErrReInitialized
+	}
 	cs := g.CipherSuite
 	if c.Content.ContentType != ContentTypeCommit {
 		return nil, ErrNotCommit
@@ -395,6 +410,8 @@ func (g *Group) ApplyCommit(c *AuthenticatedContent) (*Group, error) {
 		client:      g.client,
 		proposals:   make(map[string]*AuthenticatedContent),
 		resumption:  maps.Clone(g.resumption),
+		prior:       g.prior,
+		resumed:     g.resumed,
 	}
 	next.Secrets = NewTreeSecrets(g.Index, g.Secrets.Leaf)
 	maps.Copy(next.Secrets.Secrets, g.Secrets.Secrets)
@@ -403,6 +420,7 @@ func (g *Group) ApplyCommit(c *AuthenticatedContent) (*Group, error) {
 	if err != nil {
 		return nil, err
 	}
+	next.reinit = ch.reinit
 	if external {
 		// The joiner takes the leftmost free leaf, as an Add
 		// would give it. See RFC 9420, Section 12.4.3.2.
@@ -491,6 +509,7 @@ type changes struct {
 	added     []LeafIndex      // leaves added, which receive no path secret
 	psks      []PreSharedKeyID // pre-shared keys the commit injects
 	kemOutput []byte           // set by an ExternalInit proposal
+	reinit    *ReInit          // set by a ReInit proposal
 }
 
 // apply applies a commit's proposals to the tree and the group
@@ -556,7 +575,7 @@ func (g *Group) apply(proposals []proposal) (*changes, error) {
 			}
 			ch.kemOutput = p.ExternalInit.KEMOutput
 		case ProposalTypeReInit:
-			return nil, ErrUnsupportedProposal
+			ch.reinit = p.ReInit
 		}
 	}
 	return &ch, nil
