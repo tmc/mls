@@ -59,6 +59,13 @@ var ErrBadPadding = errors.New("mls: padding is not zero")
 // the shape the operation requires.
 var ErrBlankParent = errors.New("mls: node is blank or is not a parent")
 
+// ErrPathRequired is reported for a commit that carries no update
+// path where RFC 9420, Section 12.4 requires one. Without a path the
+// commit secret is all zero, so the epoch it begins is derived
+// entirely from secrets the previous epoch's members already hold,
+// and a member the commit removes can follow the group.
+var ErrPathRequired = errors.New("mls: commit requires an update path")
+
 // ErrEmptyTree is reported for a ratchet tree with no leaves. A group
 // always has at least one member, so an empty tree is malformed.
 var ErrEmptyTree = errors.New("mls: ratchet tree is empty")

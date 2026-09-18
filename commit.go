@@ -135,3 +135,24 @@ func (g *GroupSecrets) UnmarshalTLS(r *tlssyntax.Reader) {
 		g.PSKs = append(g.PSKs, p)
 	})
 }
+
+// pathRequired reports whether a commit covering these proposals must
+// carry an update path. A commit that covers nothing must update the
+// committer's own keys, and Update, Remove, ExternalInit and
+// GroupContextExtensions each change the membership in a way that the
+// forward secrecy of a new path is what makes real: an update path is
+// what evicts the removed member, or the old appearance of the
+// updated one. See RFC 9420, Section 12.4.
+func pathRequired(ps []proposal) bool {
+	if len(ps) == 0 {
+		return true
+	}
+	for _, p := range ps {
+		switch p.Type {
+		case ProposalTypeUpdate, ProposalTypeRemove,
+			ProposalTypeExternalInit, ProposalTypeGroupContextExtensions:
+			return true
+		}
+	}
+	return false
+}

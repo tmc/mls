@@ -404,6 +404,9 @@ func (g *Group) ApplyCommit(c *AuthenticatedContent) (*Group, error) {
 		if err := g.Tree.validateProposals(proposals, sender, &g.Context); err != nil {
 			return nil, err
 		}
+		if commit.Path == nil && pathRequired(proposals) {
+			return nil, ErrPathRequired
+		}
 	}
 
 	next := &Group{
