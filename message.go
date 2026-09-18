@@ -157,3 +157,44 @@ func (g *GroupInfo) UnmarshalTLS(r *tlssyntax.Reader) {
 	g.Signer = r.ReadUint32()
 	g.Signature = r.ReadOpaque()
 }
+
+// A Header is what a relay can learn from a message without being
+// able to decode it: which version and wire format it is, and, for
+// the two framed formats, which group and epoch it belongs to.
+// See [ParseHeader].
+type Header struct {
+	Version    ProtocolVersion
+	WireFormat WireFormat
+	GroupID    []byte // framed wire formats only; nil otherwise
+	Epoch      uint64 // valid when GroupID is non-nil
+}
+
+// ParseHeader reads the routing header of an encoded [MLSMessage]
+// without decoding the message. It succeeds for wire formats this
+// package cannot decode, so that a relay can route and forward bytes
+// it must not mangle; it reports an error only if the header itself
+// is truncated or malformed. It does not authenticate anything: a
+// header is what the sender claims, and only decoding the message
+// under a group's keys proves any of it.
+func ParseHeader(b []byte) (Header, error) {
+	r := tlssyntax.NewReader(b)
+	h := Header{
+		Version:    ProtocolVersion(r.ReadUint16()),
+		WireFormat: WireFormat(r.ReadUint16()),
+	}
+	// A PublicMessage begins with its FramedContent and a
+	// PrivateMessage with its own copy of the same two fields, so
+	// the group and epoch are in the same place in both.
+	switch h.WireFormat {
+	case WireFormatPublicMessage, WireFormatPrivateMessage:
+		h.GroupID = r.ReadOpaque()
+		h.Epoch = r.ReadUint64()
+		if h.GroupID == nil && r.Err() == nil {
+			h.GroupID = []byte{}
+		}
+	}
+	if err := r.Err(); err != nil {
+		return Header{}, err
+	}
+	return h, nil
+}
