@@ -3,6 +3,7 @@ package mls
 import (
 	"bytes"
 	"crypto/rand"
+	"slices"
 )
 
 // resumptionPSK returns the resumption key named by id, which may
@@ -125,7 +126,8 @@ func (c *Client) Resume(w *Welcome, tree RatchetTree, old *Group) (*Group, error
 		if ri == nil ||
 			ri.Version != g.Context.Version ||
 			ri.CipherSuite != g.CipherSuite ||
-			!bytes.Equal(ri.GroupID, g.Context.GroupID) {
+			!bytes.Equal(ri.GroupID, g.Context.GroupID) ||
+			!sameExtensions(ri.Extensions, g.Context.Extensions) {
 			return nil, ErrNotResumed
 		}
 	case ResumptionPSKUsageBranch:
@@ -148,6 +150,21 @@ func (c *Client) Resume(w *Welcome, tree RatchetTree, old *Group) (*Group, error
 		return nil, ErrNotResumed
 	}
 	return g, nil
+}
+
+// sameExtensions reports whether two extension lists are equal. The
+// order of a list is not constrained, so it does not matter here.
+func sameExtensions(a, b Extensions) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for _, x := range a {
+		i := slices.IndexFunc(b, func(y Extension) bool { return y.Type == x.Type })
+		if i < 0 || !bytes.Equal(x.Data, b[i].Data) {
+			return false
+		}
+	}
+	return true
 }
 
 // hasCredential reports whether any member of t presents c. RFC 9420,

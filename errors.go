@@ -112,10 +112,6 @@ var ErrNotForGroup = errors.New("mls: message is not for this group and epoch")
 // that commit begins.
 var ErrOwnCommit = errors.New("mls: cannot apply one's own commit")
 
-// ErrUnsupportedProposal is reported for a proposal type this package
-// does not implement, which is external_init and reinit.
-var ErrUnsupportedProposal = errors.New("mls: unsupported proposal type")
-
 // ErrDuplicateExtension is reported for a list of extensions holding
 // more than one extension of the same type, which RFC 9420,
 // Section 13.4 forbids.
