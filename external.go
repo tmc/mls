@@ -178,3 +178,83 @@ func (g *Group) GroupInfo() (*MLSMessage, error) {
 	}
 	return &MLSMessage{Version: g.Context.Version, WireFormat: WireFormatGroupInfo, GroupInfo: info}, nil
 }
+
+// externalSender returns the entry at index in the group's
+// external_senders extension, which names the parties outside the
+// group that may send it proposals. See RFC 9420, Section 12.1.8.1.
+func (g *Group) externalSender(index uint32) (*ExternalSender, error) {
+	var senders ExternalSenders
+	ok, err := g.Context.Extensions.Get(ExtensionTypeExternalSenders, &senders)
+	if err != nil {
+		return nil, err
+	}
+	if !ok || index >= uint32(len(senders)) {
+		return nil, ErrBadExternalSender
+	}
+	return &senders[index], nil
+}
+
+// An ExternalClient sends proposals to a group without being a member
+// of it. The group must carry an external_senders extension listing
+// the client's signature key, and Index must be its position in that
+// list. See RFC 9420, Section 12.1.8.
+//
+// A client learns the group ID and epoch a proposal must name from
+// the messages the group sends; see [ParseHeader].
+type ExternalClient struct {
+	CipherSuite   CipherSuite
+	Index         uint32
+	SignaturePriv []byte
+}
+
+// Propose frames p as a proposal to the group named by groupID in the
+// given epoch. Only the proposal types RFC 9420, Section 12.1.8
+// admits may be sent this way: Add, Remove, PreSharedKey, ReInit and
+// GroupContextExtensions.
+func (c *ExternalClient) Propose(groupID []byte, epoch uint64, p *Proposal) (*MLSMessage, error) {
+	if !externalProposalType(p.Type) {
+		return nil, ErrBadExternalSender
+	}
+	return proposeExternal(c.CipherSuite, c.SignaturePriv, Sender{
+		Type:        SenderTypeExternal,
+		SenderIndex: c.Index,
+	}, groupID, epoch, p)
+}
+
+// ProposeAdd frames a proposal by which c asks to be added to the
+// group named by groupID in the given epoch, without being invited by
+// a member. The group's members decide whether to commit it; RFC
+// 9420, Section 12.1.8 leaves that decision to the application, since
+// the proposal authenticates only the key package it carries.
+func (c *Client) ProposeAdd(groupID []byte, epoch uint64) (*MLSMessage, error) {
+	p := &Proposal{Type: ProposalTypeAdd, Add: &Add{KeyPackage: *c.KeyPackage}}
+	return proposeExternal(c.CipherSuite, c.SignaturePriv, Sender{
+		Type: SenderTypeNewMemberProposal,
+	}, groupID, epoch, p)
+}
+
+// proposeExternal signs a proposal from outside the group. Such a
+// proposal is not covered by the group context, which its sender does
+// not have, and must be sent as a public message, which its sender
+// has no keys to encrypt. See RFC 9420, Sections 6.1 and 12.1.8.
+func proposeExternal(cs CipherSuite, priv []byte, from Sender, groupID []byte, epoch uint64, p *Proposal) (*MLSMessage, error) {
+	c := &AuthenticatedContent{
+		WireFormat: WireFormatPublicMessage,
+		Content: FramedContent{
+			GroupID:     groupID,
+			Epoch:       epoch,
+			Sender:      from,
+			ContentType: ContentTypeProposal,
+			Proposal:    p,
+		},
+		Auth: FramedContentAuthData{ContentType: ContentTypeProposal},
+	}
+	if err := c.Sign(cs, priv, Version10, nil); err != nil {
+		return nil, err
+	}
+	pm, err := c.PublicMessage(cs, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	return &MLSMessage{Version: Version10, WireFormat: WireFormatPublicMessage, PublicMessage: pm}, nil
+}
