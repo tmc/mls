@@ -2,6 +2,7 @@ package mls
 
 import (
 	"bytes"
+	"crypto/subtle"
 	"encoding/hex"
 	"maps"
 	"time"
@@ -131,7 +132,7 @@ func (c *Client) join(w *Welcome, tree RatchetTree, old *Group) (*Group, error) 
 	if err != nil {
 		return nil, err
 	}
-	if !bytes.Equal(tag, info.ConfirmationTag) {
+	if subtle.ConstantTimeCompare(tag, info.ConfirmationTag) != 1 {
 		return nil, ErrBadConfirmationTag
 	}
 	interim, err := cs.InterimTranscriptHash(info.GroupContext.ConfirmedTranscriptHash, info.ConfirmationTag)
@@ -514,7 +515,7 @@ func (g *Group) ApplyCommit(c *AuthenticatedContent) (*Group, error) {
 	if err != nil {
 		return nil, err
 	}
-	if !bytes.Equal(tag, c.Auth.ConfirmationTag) {
+	if subtle.ConstantTimeCompare(tag, c.Auth.ConfirmationTag) != 1 {
 		return nil, ErrBadConfirmationTag
 	}
 	if next.interim, err = cs.InterimTranscriptHash(next.Context.ConfirmedTranscriptHash, c.Auth.ConfirmationTag); err != nil {
