@@ -28,7 +28,11 @@
 // messages.
 //
 // [Client] and [Group] tie these together into the group state
-// machine. A client generates its keys with [NewClient] and either
+// machine. RFC 9420, Section 14 requires that generating a commit not
+// modify the client's state, since the delivery service may accept a
+// different commit for the same epoch; this package enforces that by
+// construction, because a [Group] is one epoch's state and is never
+// modified. A client generates its keys with [NewClient] and either
 // starts a group with [Client.NewGroup] or joins one from a welcome
 // message with [Client.Join]. A [Group] is one epoch's state, and
 // processing a commit does not change it: [Group.Commit] and

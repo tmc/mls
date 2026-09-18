@@ -141,6 +141,13 @@ func (c *Credential) UnmarshalTLS(r *tlssyntax.Reader) {
 // client verifies the bindings it supports, and supported reports
 // which those are; the others are left to members that do support
 // them. See draft-ietf-mls-extensions, Section 6.5.2.
+//
+// Verify can therefore succeed without checking anything: a weak
+// multi-credential none of whose bindings are supported returns nil.
+// A caller that needs at least one binding checked, or that requires
+// a particular shape - one binding, a basic inner credential, an
+// identity equal to the credential key - must require it itself,
+// before or after calling Verify. Nothing here can know those rules.
 func (c *Credential) Verify(signatureKey mls.SignaturePublicKey, supported func(*Binding) bool) error {
 	if len(c.Bindings) == 0 {
 		return ErrNoBindings
