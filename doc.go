@@ -23,8 +23,22 @@
 // derivation, signature and HPKE operations of Section 5 and
 // Section 8, [KeySchedule] derives an epoch's secrets, [SecretTree]
 // derives the keys that protect its messages, and [RatchetTree]
-// implements the tree hashes, parent hashes and membership changes.
-// [AuthenticatedContent] frames and encrypts messages.
+// implements the tree hashes, parent hashes, membership changes and
+// TreeKEM update paths. [AuthenticatedContent] frames and encrypts
+// messages.
+//
+// [Client] and [Group] tie these together into the group state
+// machine. A client generates its keys with [NewClient] and either
+// starts a group with [Client.NewGroup] or joins one from a welcome
+// message with [Client.Join]. A [Group] is one epoch's state, and
+// processing a commit does not change it: [Group.Commit] and
+// [Group.Handle] return the group's state in the epoch that the
+// commit begins, so a caller that has not yet confirmed a commit can
+// keep using the epoch it has.
+//
+//	alice, err := mls.NewClient(cs, cred, 24*time.Hour)
+//	g, err := alice.NewGroup(groupID, nil)
+//	next, commit, welcome, err := g.Commit([]*mls.Proposal{add})
 //
 // Two of the seven cipher suites need X448 and Ed448, which the Go
 // standard library does not provide; they report
@@ -32,8 +46,8 @@
 // decoded structure is well formed, and the caller must still verify
 // its signatures.
 //
-// This package does not implement the group state machine. It has the
-// pieces a client needs, but the client drives them.
+// Credential types outside RFC 9420 are registered by subpackages:
+// see [RegisterCredential] and [github.com/tmc/mls/multicred].
 package mls
 
 import "github.com/tmc/mls/tlssyntax"
