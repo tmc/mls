@@ -10,6 +10,7 @@ const (
 	Version10 ProtocolVersion = 1
 )
 
+// String returns the name of the protocol version.
 func (v ProtocolVersion) String() string {
 	return enumString("ProtocolVersion", uint64(v), []string{"reserved", "mls10"})
 }
@@ -29,6 +30,8 @@ const (
 	P384AES256GCMSHA384P384             CipherSuite = 7
 )
 
+// String returns the name RFC 9420 gives the cipher suite, or its
+// number if it is not one this package knows.
 func (c CipherSuite) String() string {
 	return enumString("CipherSuite", uint64(c), []string{
 		"reserved",
@@ -54,6 +57,7 @@ const (
 	WireFormatKeyPackage     WireFormat = 5
 )
 
+// String returns the name of the wire format.
 func (f WireFormat) String() string {
 	return enumString("WireFormat", uint64(f), []string{
 		"reserved", "mls_public_message", "mls_private_message",
@@ -71,6 +75,7 @@ const (
 	ContentTypeCommit      ContentType = 3
 )
 
+// String returns the name of the content type.
 func (t ContentType) String() string {
 	return enumString("ContentType", uint64(t), []string{"reserved", "application", "proposal", "commit"})
 }
@@ -86,6 +91,7 @@ const (
 	SenderTypeNewMemberCommit   SenderType = 4
 )
 
+// String returns the name of the sender type.
 func (t SenderType) String() string {
 	return enumString("SenderType", uint64(t), []string{
 		"reserved", "member", "external", "new_member_proposal", "new_member_commit",
@@ -106,6 +112,8 @@ const (
 	ProposalTypeGroupContextExtensions ProposalType = 7
 )
 
+// String returns the name of the proposal type, or its number if it
+// is not one this package knows.
 func (t ProposalType) String() string {
 	return enumString("ProposalType", uint64(t), []string{
 		"reserved", "add", "update", "remove", "psk", "reinit",
@@ -122,6 +130,7 @@ const (
 	NodeTypeParent NodeType = 2
 )
 
+// String returns the name of the node type.
 func (t NodeType) String() string {
 	return enumString("NodeType", uint64(t), []string{"reserved", "leaf", "parent"})
 }
@@ -137,6 +146,7 @@ const (
 	LeafNodeSourceCommit     LeafNodeSource = 3
 )
 
+// String returns the name of the leaf node source.
 func (s LeafNodeSource) String() string {
 	return enumString("LeafNodeSource", uint64(s), []string{"reserved", "key_package", "update", "commit"})
 }

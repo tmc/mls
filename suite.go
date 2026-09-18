@@ -312,6 +312,8 @@ func (cs CipherSuite) AEADKeySize() int {
 	return p.keySize
 }
 
+// AEADNonceSize is the nonce length of the cipher suite's AEAD, in
+// bytes.
 func (cs CipherSuite) AEADNonceSize() int {
 	p, err := cs.params()
 	if err != nil {

@@ -26,6 +26,8 @@ const (
 // See RFC 9420, Section 13.5.
 func (t ExtensionType) GREASE() bool { return t&0x0f0f == 0x0a0a }
 
+// String returns the name of the extension type, or its number if
+// it is not one this package knows.
 func (t ExtensionType) String() string {
 	return enumString("ExtensionType", uint64(t), []string{
 		"reserved", "application_id", "ratchet_tree", "required_capabilities",

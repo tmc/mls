@@ -38,6 +38,7 @@ const (
 	PSKTypeResumption PSKType = 2
 )
 
+// String returns the name of the pre-shared key type.
 func (t PSKType) String() string {
 	return enumString("PSKType", uint64(t), []string{"reserved", "external", "resumption"})
 }
@@ -52,6 +53,7 @@ const (
 	ResumptionPSKUsageBranch      ResumptionPSKUsage = 3
 )
 
+// String returns the name of the resumption key usage.
 func (u ResumptionPSKUsage) String() string {
 	return enumString("ResumptionPSKUsage", uint64(u), []string{"reserved", "application", "reinit", "branch"})
 }
@@ -256,6 +258,8 @@ const (
 	ProposalOrRefTypeReference ProposalOrRefType = 2
 )
 
+// String reports whether the proposal is carried inline or by
+// reference.
 func (t ProposalOrRefType) String() string {
 	return enumString("ProposalOrRefType", uint64(t), []string{"reserved", "proposal", "reference"})
 }

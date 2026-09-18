@@ -40,6 +40,8 @@ func RegisterCredential(t CredentialType, body func() CredentialCodec) {
 	credentials[t] = body
 }
 
+// String returns the name of the credential type, or its number
+// if it is not one this package knows.
 func (t CredentialType) String() string {
 	return enumString("CredentialType", uint64(t), []string{"reserved", "basic", "x509"})
 }
