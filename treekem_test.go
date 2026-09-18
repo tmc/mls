@@ -137,7 +137,7 @@ func testTreeKEM(t *testing.T, vec *treeKEMVector) {
 
 		for _, j := range members(up.Sender) {
 			s := private(j)
-			commit, err := after.DecryptPathSecrets(cs, up.Sender, &path, ctx, s)
+			commit, err := after.DecryptPathSecrets(cs, up.Sender, &path, ctx, s, nil)
 			if err != nil {
 				t.Errorf("leaf %d: decrypt path from %d: %v", j, up.Sender, err)
 				continue
@@ -172,7 +172,7 @@ func testTreeKEM(t *testing.T, vec *treeKEMVector) {
 			t.Fatalf("merge new path from %d: %v", up.Sender, err)
 		}
 		for _, j := range members(up.Sender) {
-			commit, err := theirs.DecryptPathSecrets(cs, up.Sender, fresh, ctx, private(j))
+			commit, err := theirs.DecryptPathSecrets(cs, up.Sender, fresh, ctx, private(j), nil)
 			if err != nil {
 				t.Errorf("leaf %d: decrypt new path from %d: %v", j, up.Sender, err)
 				continue

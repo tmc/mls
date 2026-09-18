@@ -75,3 +75,33 @@ var ErrBadTreeKEM = errors.New("mls: malformed update path")
 // ErrNotInPath is reported when an update path carries no path
 // secret that the member can decrypt.
 var ErrNotInPath = errors.New("mls: no path secret for this member")
+
+// ErrNoRatchetTree is reported when a welcome message carries no
+// ratchet_tree extension and the caller supplied no tree.
+var ErrNoRatchetTree = errors.New("mls: no ratchet tree")
+
+// ErrBadTreeHash is reported for a ratchet tree that does not match
+// the tree hash in the group context that summarizes it.
+var ErrBadTreeHash = errors.New("mls: tree hash does not match")
+
+// ErrBadConfirmationTag is reported for a commit or group info whose
+// confirmation tag does not match the key schedule.
+var ErrBadConfirmationTag = errors.New("mls: confirmation tag does not verify")
+
+// ErrUnknownPSK is reported for a pre-shared key the client cannot
+// supply.
+var ErrUnknownPSK = errors.New("mls: unknown pre-shared key")
+
+// ErrUnknownProposal is reported for a proposal that a commit refers
+// to but that the member never received.
+var ErrUnknownProposal = errors.New("mls: unknown proposal")
+
+// ErrRemoved is reported when a commit removes the member applying it.
+var ErrRemoved = errors.New("mls: member was removed from the group")
+
+var (
+	errNotProposal         = errors.New("mls: content is not a proposal")
+	errNotForGroup         = errors.New("mls: message is not for this group and epoch")
+	errOwnCommit           = errors.New("mls: cannot apply one's own commit")
+	errUnsupportedProposal = errors.New("mls: unsupported proposal type")
+)

@@ -3,6 +3,7 @@ package mls
 import (
 	"bytes"
 	"maps"
+	"math/bits"
 	"slices"
 
 	"github.com/tmc/mls/tlssyntax"
@@ -261,8 +262,9 @@ func (t *RatchetTree) MergeUpdatePath(cs CipherSuite, i LeafIndex, up *UpdatePat
 // at leaf i every path secret that s is entitled to, records them in
 // s, and returns the epoch's commit secret. The tree must already
 // have been merged, and ctx must be the group context of the new
-// epoch; its TreeHash is recomputed from the merged tree. See RFC 9420, Section 7.5.
-func (t RatchetTree) DecryptPathSecrets(cs CipherSuite, i LeafIndex, up *UpdatePath, ctx *GroupContext, s *TreeSecrets) ([]byte, error) {
+// epoch; its TreeHash is recomputed from the merged tree. Leaves that
+// the same commit added are named in exclude. See RFC 9420, Section 7.5.
+func (t RatchetTree) DecryptPathSecrets(cs CipherSuite, i LeafIndex, up *UpdatePath, ctx *GroupContext, s *TreeSecrets, exclude []LeafIndex) ([]byte, error) {
 	path := t.FilteredDirectPath(i)
 	if len(path) != len(up.Nodes) {
 		return nil, ErrBadTreeKEM
@@ -278,7 +280,7 @@ func (t RatchetTree) DecryptPathSecrets(cs CipherSuite, i LeafIndex, up *UpdateP
 		if !contains(c, s.Index) {
 			continue
 		}
-		res := t.Resolution(c)
+		res := t.resolutionExcluding(c, exclude)
 		if len(res) != len(up.Nodes[k].EncryptedPathSecret) {
 			return nil, ErrBadTreeKEM
 		}
@@ -294,7 +296,11 @@ func (t RatchetTree) DecryptPathSecrets(cs CipherSuite, i LeafIndex, up *UpdateP
 			if err != nil {
 				return nil, err
 			}
-			return s.chain(cs, secret, path[k:], up.Nodes[k:])
+			keys := make([]HPKEPublicKey, len(up.Nodes)-k)
+			for n := range keys {
+				keys[n] = up.Nodes[k+n].EncryptionKey
+			}
+			return s.chain(cs, secret, path[k:], keys)
 		}
 		break
 	}
@@ -303,14 +309,15 @@ func (t RatchetTree) DecryptPathSecrets(cs CipherSuite, i LeafIndex, up *UpdateP
 
 // chain records secret as the path secret of path[0] and derives the
 // path secrets of the nodes above it, checking each against the
-// public key the sender advertised, and returns the commit secret.
-func (s *TreeSecrets) chain(cs CipherSuite, secret []byte, path []NodeIndex, nodes []UpdatePathNode) ([]byte, error) {
+// public key keys[k] the sender advertised, and returns the secret
+// one step past the end, which is the commit secret.
+func (s *TreeSecrets) chain(cs CipherSuite, secret []byte, path []NodeIndex, keys []HPKEPublicKey) ([]byte, error) {
 	for k, x := range path {
 		_, pub, err := cs.nodeKeyPair(secret)
 		if err != nil {
 			return nil, err
 		}
-		if !bytes.Equal(pub, nodes[k].EncryptionKey) {
+		if !bytes.Equal(pub, keys[k]) {
 			return nil, ErrBadTreeKEM
 		}
 		s.Secrets[x] = secret
@@ -319,4 +326,42 @@ func (s *TreeSecrets) chain(cs CipherSuite, secret []byte, path []NodeIndex, nod
 		}
 	}
 	return secret, nil
+}
+
+// SetPath records secret as the path secret of node x and derives the
+// path secrets of every node above x on the member's filtered direct
+// path, checking each against the public key in t. A new member does
+// this with the path secret a welcome message carries.
+// See RFC 9420, Section 12.4.3.1.
+func (s *TreeSecrets) SetPath(cs CipherSuite, t RatchetTree, x NodeIndex, secret []byte) error {
+	path := t.FilteredDirectPath(s.Index)
+	k := slices.Index(path, x)
+	if k < 0 {
+		return ErrNotInPath
+	}
+	keys := make([]HPKEPublicKey, len(path)-k)
+	for n, y := range path[k:] {
+		keys[n] = t.encryptionKey(y)
+	}
+	_, err := s.chain(cs, secret, path[k:], keys)
+	return err
+}
+
+// commonAncestor returns the lowest node whose subtree holds both
+// leaf a and leaf b.
+func commonAncestor(a, b LeafIndex) NodeIndex {
+	k := bits.Len32(uint32(a ^ b))
+	return NodeIndex(a>>k<<k)*2 + NodeIndex(1)<<k - 1
+}
+
+// prune drops every path secret whose node no longer holds the
+// matching public key, which happens when a commit blanks or replaces
+// the node.
+func (s *TreeSecrets) prune(cs CipherSuite, t RatchetTree) {
+	for x, secret := range s.Secrets {
+		_, pub, err := cs.nodeKeyPair(secret)
+		if err != nil || !bytes.Equal(pub, t.encryptionKey(x)) {
+			delete(s.Secrets, x)
+		}
+	}
 }

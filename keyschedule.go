@@ -150,3 +150,19 @@ func (cs CipherSuite) PSKSecret(ids []PreSharedKeyID, psks [][]byte) ([]byte, er
 	}
 	return secret, nil
 }
+
+// WelcomeSecret derives the secret that protects the group info in a
+// welcome message. Unlike the rest of the schedule it does not depend
+// on the group context, since a new member cannot read the context
+// until it has decrypted the group info.
+// See RFC 9420, Section 8.
+func (cs CipherSuite) WelcomeSecret(joinerSecret, pskSecret []byte) ([]byte, error) {
+	if pskSecret == nil {
+		pskSecret = make([]byte, cs.HashSize())
+	}
+	member, err := cs.Extract(joinerSecret, pskSecret)
+	if err != nil {
+		return nil, err
+	}
+	return cs.DeriveSecret(member, "welcome")
+}

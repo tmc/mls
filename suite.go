@@ -44,6 +44,7 @@ type params struct {
 	keySize   int  // AEAD key size, Nk
 	nonceSize int  // AEAD nonce size, Nn
 	chacha    bool // AEAD is ChaCha20-Poly1305
+	kemSize   int  // KEM private key size, Nsk
 	sig       signatureScheme
 	sigCurve  elliptic.Curve // sig == signatureECDSA
 }
@@ -53,27 +54,27 @@ type params struct {
 var suiteParams = map[CipherSuite]*params{
 	X25519AES128GCMSHA256Ed25519: {
 		hash: crypto.SHA256, newHash: sha256.New, curve: ecdh.X25519(),
-		kdf: hpke.HKDFSHA256, aead: hpke.AES128GCM, keySize: 16, nonceSize: 12,
+		kdf: hpke.HKDFSHA256, aead: hpke.AES128GCM, keySize: 16, nonceSize: 12, kemSize: 32,
 		sig: signatureEd25519,
 	},
 	P256AES128GCMSHA256P256: {
 		hash: crypto.SHA256, newHash: sha256.New, curve: ecdh.P256(),
-		kdf: hpke.HKDFSHA256, aead: hpke.AES128GCM, keySize: 16, nonceSize: 12,
+		kdf: hpke.HKDFSHA256, aead: hpke.AES128GCM, keySize: 16, nonceSize: 12, kemSize: 32,
 		sig: signatureECDSA, sigCurve: elliptic.P256(),
 	},
 	X25519ChaCha20Poly1305SHA256Ed25519: {
 		hash: crypto.SHA256, newHash: sha256.New, curve: ecdh.X25519(),
-		kdf: hpke.HKDFSHA256, aead: hpke.ChaCha20Poly1305, keySize: 32, nonceSize: 12, chacha: true,
+		kdf: hpke.HKDFSHA256, aead: hpke.ChaCha20Poly1305, keySize: 32, nonceSize: 12, chacha: true, kemSize: 32,
 		sig: signatureEd25519,
 	},
 	P521AES256GCMSHA512P521: {
 		hash: crypto.SHA512, newHash: sha512.New, curve: ecdh.P521(),
-		kdf: hpke.HKDFSHA512, aead: hpke.AES256GCM, keySize: 32, nonceSize: 12,
+		kdf: hpke.HKDFSHA512, aead: hpke.AES256GCM, keySize: 32, nonceSize: 12, kemSize: 66,
 		sig: signatureECDSA, sigCurve: elliptic.P521(),
 	},
 	P384AES256GCMSHA384P384: {
 		hash: crypto.SHA384, newHash: sha512.New384, curve: ecdh.P384(),
-		kdf: hpke.HKDFSHA384, aead: hpke.AES256GCM, keySize: 32, nonceSize: 12,
+		kdf: hpke.HKDFSHA384, aead: hpke.AES256GCM, keySize: 32, nonceSize: 12, kemSize: 48,
 		sig: signatureECDSA, sigCurve: elliptic.P384(),
 	},
 }
@@ -289,7 +290,7 @@ func (cs CipherSuite) DecryptWithLabel(priv []byte, label string, context []byte
 	if err != nil {
 		return nil, err
 	}
-	key, err := hpke.DHKEM(p.curve).NewPrivateKey(priv)
+	key, err := hpke.DHKEM(p.curve).NewPrivateKey(pad(priv, p.kemSize))
 	if err != nil {
 		return nil, err
 	}
@@ -335,6 +336,18 @@ func (cs CipherSuite) AEAD(key []byte) (cipher.AEAD, error) {
 		return nil, err
 	}
 	return cipher.NewGCM(block)
+}
+
+// pad left-pads b with zeros to n bytes. Test vectors and other
+// implementations sometimes strip the leading zeros of a NIST curve
+// private key, which the crypto packages require in full.
+func pad(b []byte, n int) []byte {
+	if len(b) >= n {
+		return b
+	}
+	out := make([]byte, n)
+	copy(out[n-len(b):], b)
+	return out
 }
 
 // padScalar left-pads a private key to the curve's scalar size.
@@ -425,7 +438,7 @@ func (cs CipherSuite) PublicKey(priv []byte) (HPKEPublicKey, error) {
 	if err != nil {
 		return nil, err
 	}
-	key, err := hpke.DHKEM(p.curve).NewPrivateKey(priv)
+	key, err := hpke.DHKEM(p.curve).NewPrivateKey(pad(priv, p.kemSize))
 	if err != nil {
 		return nil, err
 	}
