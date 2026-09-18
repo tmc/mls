@@ -62,3 +62,7 @@ var errBlankParent = errors.New("mls: node is blank or is not a parent")
 // cannot be chained back to a leaf by parent hashes, which means it
 // was not introduced by a member of the group.
 var ErrBadParentHash = errors.New("mls: parent node is not parent-hash valid")
+
+// ErrNotInWelcome is reported when a welcome message carries no
+// secrets for the key package it was offered to.
+var ErrNotInWelcome = errors.New("mls: welcome message has no secrets for this key package")

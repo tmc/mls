@@ -1,5 +1,5 @@
-// Package mls implements the wire format of the Messaging Layer
-// Security protocol, RFC 9420.
+// Package mls implements the Messaging Layer Security protocol,
+// RFC 9420.
 //
 // This package defines the protocol's structures and their encodings.
 // Each structure implements [github.com/tmc/mls/tlssyntax.Marshaler]
@@ -18,10 +18,22 @@
 // example, decides whether a LeafNode carries a lifetime, a parent
 // hash, or neither.
 //
-// This package does not implement the protocol itself. It has no key
-// schedule, no ratchet tree operations, and it neither produces nor
-// verifies signatures; a decoded structure is well formed but not
-// authenticated.
+// Above the wire format, the package provides the cryptographic layer
+// the protocol is built from: [CipherSuite] holds the labeled
+// derivation, signature and HPKE operations of Section 5 and
+// Section 8, [KeySchedule] derives an epoch's secrets, [SecretTree]
+// derives the keys that protect its messages, and [RatchetTree]
+// implements the tree hashes, parent hashes and membership changes.
+// [AuthenticatedContent] frames and encrypts messages.
+//
+// Two of the seven cipher suites need X448 and Ed448, which the Go
+// standard library does not provide; they report
+// [ErrUnsupportedCipherSuite]. Decoding never authenticates: a
+// decoded structure is well formed, and the caller must still verify
+// its signatures.
+//
+// This package does not implement the group state machine. It has the
+// pieces a client needs, but the client drives them.
 package mls
 
 import "github.com/tmc/mls/tlssyntax"
