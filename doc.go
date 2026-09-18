@@ -34,11 +34,18 @@
 // construction, because a [Group] is one epoch's state and is never
 // modified. A client generates its keys with [NewClient] and either
 // starts a group with [Client.NewGroup] or joins one from a welcome
-// message with [Client.Join]. A [Group] is one epoch's state, and
-// processing a commit does not change it: [Group.Commit] and
-// [Group.Handle] return the group's state in the epoch that the
-// commit begins, so a caller that has not yet confirmed a commit can
-// keep using the epoch it has.
+// message with [Client.Join], or from a GroupInfo alone with
+// [Client.JoinExternal], which is the external commit of Section 8.3.
+// A party outside a group may propose to it as well, either as a
+// sender the group provisioned ([ExternalClient.Propose]) or by
+// asking to be added ([Client.ProposeAdd]). A group ends either by
+// losing its members or by being reinitialized: see [Group.ReInit],
+// [Group.Reinitialize], [Group.Branch] and [Client.Resume].
+//
+// Processing a commit does not change the group it applies to:
+// [Group.Commit] and [Group.Handle] return the group's state in the
+// epoch that the commit begins, so a caller that has not yet
+// confirmed a commit can keep using the epoch it has.
 //
 //	alice, err := mls.NewClient(cs, cred, 24*time.Hour)
 //	g, err := alice.NewGroup(groupID, nil)
