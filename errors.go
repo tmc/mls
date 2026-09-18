@@ -54,9 +54,14 @@ var ErrNotMember = errors.New("mls: sender is not a group member")
 // not all zero.
 var ErrBadPadding = errors.New("mls: padding is not zero")
 
-// errBlankParent is reported when a parent hash is computed for a
-// node that holds no parent.
-var errBlankParent = errors.New("mls: node is blank or is not a parent")
+// ErrBlankParent is reported when a parent hash is computed for a
+// node that is blank or is a leaf, which means the tree does not have
+// the shape the operation requires.
+var ErrBlankParent = errors.New("mls: node is blank or is not a parent")
+
+// ErrEmptyTree is reported for a ratchet tree with no leaves. A group
+// always has at least one member, so an empty tree is malformed.
+var ErrEmptyTree = errors.New("mls: ratchet tree is empty")
 
 // ErrBadParentHash is reported when a parent node in a ratchet tree
 // cannot be chained back to a leaf by parent hashes, which means it

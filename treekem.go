@@ -55,7 +55,7 @@ func (s *TreeSecrets) Consistent(cs CipherSuite, t RatchetTree) error {
 	for _, x := range slices.Sorted(maps.Keys(s.Secrets)) {
 		n := t.Node(x)
 		if n == nil || n.Parent == nil {
-			return errBlankParent
+			return ErrBlankParent
 		}
 		_, pub, err := cs.nodeKeyPair(s.Secrets[x])
 		if err != nil {

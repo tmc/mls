@@ -147,6 +147,9 @@ func (t RatchetTree) TreeHash(cs CipherSuite, x NodeIndex) ([]byte, error) {
 // RootHash is the tree hash of the whole tree, which the group
 // context carries so that members can confirm they agree on it.
 func (t RatchetTree) RootHash(cs CipherSuite) ([]byte, error) {
+	if t.Size() == 0 {
+		return nil, ErrEmptyTree
+	}
 	return t.TreeHash(cs, root(t.Size()))
 }
 
@@ -183,7 +186,7 @@ func (t RatchetTree) withoutLeaves(leaves []uint32) RatchetTree {
 func (t RatchetTree) ParentHash(cs CipherSuite, p, s NodeIndex) ([]byte, error) {
 	node := t.Node(p)
 	if node == nil || node.Parent == nil {
-		return nil, errBlankParent
+		return nil, ErrBlankParent
 	}
 	sibHash, err := t.withoutLeaves(node.Parent.UnmergedLeaves).TreeHash(cs, s)
 	if err != nil {
