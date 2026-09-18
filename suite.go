@@ -199,7 +199,7 @@ func (cs CipherSuite) SignWithLabel(priv []byte, label string, content []byte) (
 		}
 		return ed25519.Sign(ed25519.NewKeyFromSeed(priv), msg), nil
 	default:
-		key, err := ecdsa.ParseRawPrivateKey(p.sigCurve, priv)
+		key, err := ecdsa.ParseRawPrivateKey(p.sigCurve, padScalar(p.sigCurve, priv))
 		if err != nil {
 			return nil, err
 		}
@@ -335,4 +335,17 @@ func (cs CipherSuite) AEAD(key []byte) (cipher.AEAD, error) {
 		return nil, err
 	}
 	return cipher.NewGCM(block)
+}
+
+// padScalar left-pads a private key to the curve's scalar size.
+// Encoders sometimes drop leading zero bytes, which crypto/ecdsa
+// rejects.
+func padScalar(curve elliptic.Curve, priv []byte) []byte {
+	n := (curve.Params().N.BitLen() + 7) / 8
+	if len(priv) >= n {
+		return priv
+	}
+	b := make([]byte, n)
+	copy(b[n-len(priv):], priv)
+	return b
 }

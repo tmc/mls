@@ -29,3 +29,27 @@ var errPSKCount = errors.New("mls: pre-shared key count does not match identifie
 // errNotCommit is reported when a transcript hash is computed over
 // content that is not a commit.
 var errNotCommit = errors.New("mls: content is not a commit")
+
+// errConsumed is reported for a secret that the deletion schedule of
+// RFC 9420, Section 9.2 has already discarded.
+var errConsumed = errors.New("mls: secret has already been consumed")
+
+// errLeafRange is reported for a leaf index outside the group.
+var errLeafRange = errors.New("mls: leaf index out of range")
+
+// ErrApplicationNotEncrypted is reported when application data is
+// framed as a PublicMessage. RFC 9420, Section 6.2 requires that
+// application messages always be encrypted.
+var ErrApplicationNotEncrypted = errors.New("mls: application data must be sent as a PrivateMessage")
+
+// ErrBadMembershipTag is reported when the membership tag of a
+// PublicMessage does not verify.
+var ErrBadMembershipTag = errors.New("mls: membership tag does not verify")
+
+// ErrNotMember is reported when content that only a member may send
+// has some other sender type.
+var ErrNotMember = errors.New("mls: sender is not a group member")
+
+// ErrBadPadding is reported when the padding of a PrivateMessage is
+// not all zero.
+var ErrBadPadding = errors.New("mls: padding is not zero")

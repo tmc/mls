@@ -220,3 +220,6 @@ var ErrMalformed = errors.New("tlssyntax: malformed value")
 type UnmarshalerFunc func(r *Reader)
 
 func (f UnmarshalerFunc) UnmarshalTLS(r *Reader) { f(r) }
+
+// Len returns the number of bytes left to read.
+func (r *Reader) Len() int { return len(r.s) }
