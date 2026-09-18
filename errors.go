@@ -53,3 +53,12 @@ var ErrNotMember = errors.New("mls: sender is not a group member")
 // ErrBadPadding is reported when the padding of a PrivateMessage is
 // not all zero.
 var ErrBadPadding = errors.New("mls: padding is not zero")
+
+// errBlankParent is reported when a parent hash is computed for a
+// node that holds no parent.
+var errBlankParent = errors.New("mls: node is blank or is not a parent")
+
+// ErrBadParentHash is reported when a parent node in a ratchet tree
+// cannot be chained back to a leaf by parent hashes, which means it
+// was not introduced by a member of the group.
+var ErrBadParentHash = errors.New("mls: parent node is not parent-hash valid")
