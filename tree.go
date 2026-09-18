@@ -37,6 +37,32 @@ func (t RatchetTree) Leaf(i LeafIndex) *LeafNode {
 	return nil
 }
 
+// Clone returns a copy of t that shares no state with it. The array
+// copy alone is not enough: [RatchetTree.Add] records the new leaf in
+// the unmerged_leaves of the nodes above it, which would otherwise be
+// a write through to the tree it was copied from. A group holds the
+// tree of one epoch and must not be changed by the next.
+func (t RatchetTree) Clone() RatchetTree {
+	c := make(RatchetTree, len(t))
+	for i, n := range t {
+		if n == nil {
+			continue
+		}
+		m := *n
+		if n.Leaf != nil {
+			leaf := *n.Leaf
+			m.Leaf = &leaf
+		}
+		if n.Parent != nil {
+			parent := *n.Parent
+			parent.UnmergedLeaves = slices.Clone(n.Parent.UnmergedLeaves)
+			m.Parent = &parent
+		}
+		c[i] = &m
+	}
+	return c
+}
+
 // grow extends t so that x is a valid index.
 func (t *RatchetTree) grow(x NodeIndex) {
 	for NodeIndex(len(*t)) <= x {

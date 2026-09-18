@@ -200,7 +200,7 @@ func (g *Group) commit(extra []*Proposal, sender SenderType) (*Group, *MLSMessag
 	next := &Group{
 		CipherSuite: cs,
 		Context:     g.Context,
-		Tree:        slices.Clone(g.Tree),
+		Tree:        g.Tree.Clone(),
 		Index:       g.Index,
 		client:      g.client,
 		proposals:   make(map[string]*AuthenticatedContent),

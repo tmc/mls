@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/hex"
 	"maps"
-	"slices"
 	"time"
 )
 
@@ -149,6 +148,9 @@ func (c *Client) join(w *Welcome, tree RatchetTree, old *Group) (*Group, error) 
 	if err := private.Consistent(cs, tree); err != nil {
 		return nil, err
 	}
+	// The tree is cloned because it comes from the caller, who may
+	// be holding it as another group's tree.
+	tree = tree.Clone()
 	g := &Group{
 		CipherSuite: cs,
 		Context:     info.GroupContext,
@@ -405,7 +407,7 @@ func (g *Group) ApplyCommit(c *AuthenticatedContent) (*Group, error) {
 	next := &Group{
 		CipherSuite: cs,
 		Context:     g.Context,
-		Tree:        slices.Clone(g.Tree),
+		Tree:        g.Tree.Clone(),
 		Index:       g.Index,
 		client:      g.client,
 		proposals:   make(map[string]*AuthenticatedContent),

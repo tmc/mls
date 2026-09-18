@@ -2,7 +2,6 @@ package mls
 
 import (
 	"bytes"
-	"slices"
 )
 
 // JoinExternal joins a group from a GroupInfo, without being added by
@@ -66,7 +65,7 @@ func (c *Client) JoinExternal(info *GroupInfo, tree RatchetTree) (*Group, *MLSMe
 	g := &Group{
 		CipherSuite: cs,
 		Context:     info.GroupContext,
-		Tree:        slices.Clone(tree),
+		Tree:        tree.Clone(),
 		Schedule:    &KeySchedule{CipherSuite: cs, InitSecret: initSecret},
 		client:      c,
 		interim:     interim,
