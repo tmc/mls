@@ -157,7 +157,15 @@ func (g *Group) Commit(extra []*Proposal) (*Group, *MLSMessage, *MLSMessage, err
 		commit.Proposals = append(commit.Proposals, ProposalOrRef{Type: ProposalOrRefTypeReference, Reference: r})
 		proposals = append(proposals, proposal{c.Content.Proposal, LeafIndex(c.Content.Sender.LeafIndex)})
 	}
+	now := time.Now()
 	for _, p := range extra {
+		// A member must not send a key package that has
+		// expired, even though it may receive one.
+		if p.Type == ProposalTypeAdd {
+			if err := p.Add.KeyPackage.Validate(now); err != nil {
+				return nil, nil, nil, err
+			}
+		}
 		commit.Proposals = append(commit.Proposals, ProposalOrRef{Type: ProposalOrRefTypeProposal, Proposal: p})
 		proposals = append(proposals, proposal{p, g.Index})
 	}

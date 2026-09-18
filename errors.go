@@ -121,3 +121,27 @@ var ErrUnsupportedProposal = errors.New("mls: unsupported proposal type")
 // Section 13.4 forbids.
 var ErrDuplicateExtension = errors.New("mls: duplicate extension")
 
+// ErrBadLeafNodeSource is reported for a leaf node whose source is
+// not the one its position requires: key_package in a key package,
+// update in an Update proposal, commit in an update path.
+// See RFC 9420, Section 7.3.
+var ErrBadLeafNodeSource = errors.New("mls: wrong leaf node source")
+
+// ErrExpired is reported for a key package used outside the lifetime
+// of its leaf node.
+var ErrExpired = errors.New("mls: key package has expired")
+
+// ErrDuplicateLeafKey is reported for a leaf node whose encryption or
+// signature key is already in use in the group, which RFC 9420,
+// Section 7.3 forbids.
+var ErrDuplicateLeafKey = errors.New("mls: leaf node key is already in use")
+
+// ErrUnsupportedCapability is reported for a leaf node that does not
+// support what it must: an extension it carries, a credential type
+// another member uses, or the group's required capabilities.
+// See RFC 9420, Section 7.3.
+var ErrUnsupportedCapability = errors.New("mls: unsupported capability")
+
+// ErrUnsupportedVersion is reported for a protocol version other than
+// mls10.
+var ErrUnsupportedVersion = errors.New("mls: unsupported protocol version")

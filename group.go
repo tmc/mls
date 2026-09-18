@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"maps"
 	"slices"
+	"time"
 )
 
 // A Client holds the private keys of one member. It is the starting
@@ -167,7 +168,7 @@ func (t RatchetTree) verify(cs CipherSuite, ctx *GroupContext) error {
 	if err := t.VerifyParentHashes(cs); err != nil {
 		return err
 	}
-	return t.VerifyLeafSignatures(cs, ctx.GroupID)
+	return t.validateLeaves(cs, ctx)
 }
 
 // pskSecret resolves a list of pre-shared key identifiers against the
@@ -374,6 +375,9 @@ func (g *Group) ApplyCommit(c *AuthenticatedContent) (*Group, error) {
 		if err := next.Tree.MergeUpdatePath(cs, sender, commit.Path); err != nil {
 			return nil, err
 		}
+		if err := next.Tree.validateLeafInGroup(cs, &commit.Path.LeafNode, sender, &next.Context, LeafNodeSourceCommit); err != nil {
+			return nil, err
+		}
 		next.Secrets.prune(cs, next.Tree)
 		commitSecret, err = next.Tree.DecryptPathSecrets(cs, sender, commit.Path, &next.Context, next.Secrets, added)
 		if err != nil {
@@ -431,6 +435,18 @@ func (g *Group) apply(proposals []proposal) (added []LeafIndex, psks []PreShared
 	for _, p := range proposals {
 		if p.Type == ProposalTypeUpdate {
 			leaf := p.Update.LeafNode
+			old := g.Tree.Leaf(p.sender)
+			if old == nil {
+				return nil, nil, ErrLeafRange
+			}
+			// An update must change the leaf's encryption key;
+			// otherwise it gives the group no new secrecy.
+			if bytes.Equal(old.EncryptionKey, leaf.EncryptionKey) {
+				return nil, nil, ErrDuplicateLeafKey
+			}
+			if err := g.Tree.validateLeafInGroup(g.CipherSuite, &leaf, p.sender, &g.Context, LeafNodeSourceUpdate); err != nil {
+				return nil, nil, err
+			}
 			g.Tree.Update(p.sender, &leaf)
 		}
 	}
@@ -445,8 +461,22 @@ func (g *Group) apply(proposals []proposal) (added []LeafIndex, psks []PreShared
 	for _, p := range proposals {
 		switch p.Type {
 		case ProposalTypeAdd:
+			if p.Add.KeyPackage.CipherSuite != g.CipherSuite {
+				return nil, nil, ErrUnsupportedCipherSuite
+			}
+			// The lifetime is not checked here: a key package
+			// may expire between being sent and being applied,
+			// and RFC 9420, Section 7.3 only recommends the
+			// check on the receiving side.
+			if err := p.Add.KeyPackage.Validate(time.Time{}); err != nil {
+				return nil, nil, err
+			}
 			leaf := p.Add.KeyPackage.LeafNode
-			added = append(added, g.Tree.Add(&leaf))
+			i := g.Tree.Add(&leaf)
+			if err := g.Tree.validateLeafInGroup(g.CipherSuite, &leaf, i, &g.Context, LeafNodeSourceKeyPackage); err != nil {
+				return nil, nil, err
+			}
+			added = append(added, i)
 		case ProposalTypePreSharedKey:
 			psks = append(psks, p.PreSharedKey.PSK)
 		case ProposalTypeExternalInit, ProposalTypeReInit:
