@@ -76,6 +76,12 @@ var ErrGenerationJump = errors.New("mls: message generation is too far ahead")
 // key's private half can read both positions.
 var ErrDuplicateNodeKey = errors.New("mls: encryption key appears at more than one node")
 
+// ErrBadUnmergedLeaves is reported for a parent node whose
+// unmerged_leaves does not list a set of leaves below it that the
+// nodes in between agree on. The list decides a node's resolution,
+// and so who a commit encrypts path secrets to.
+var ErrBadUnmergedLeaves = errors.New("mls: malformed unmerged leaves")
+
 // ErrEmptyTree is reported for a ratchet tree with no leaves. A group
 // always has at least one member, so an empty tree is malformed.
 var ErrEmptyTree = errors.New("mls: ratchet tree is empty")

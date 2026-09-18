@@ -191,6 +191,9 @@ func (t RatchetTree) verify(cs CipherSuite, ctx *GroupContext) error {
 	if err := t.verifyNodeKeys(); err != nil {
 		return err
 	}
+	if err := t.verifyUnmergedLeaves(); err != nil {
+		return err
+	}
 	return t.validateLeaves(cs, ctx)
 }
 

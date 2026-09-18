@@ -250,6 +250,45 @@ func (t RatchetTree) verifyNodeKeys() error {
 	return nil
 }
 
+// verifyUnmergedLeaves checks each parent's unmerged_leaves: that
+// every entry is a leaf below the parent that is not blank, and that
+// the nodes in between say the same. The list decides a node's
+// resolution, and so who a commit encrypts its path secrets to.
+// See RFC 9420, Section 12.4.3.1.
+func (t RatchetTree) verifyUnmergedLeaves() error {
+	for x := NodeIndex(1); int(x) < len(t); x += 2 {
+		n := t.Node(x)
+		if n == nil || n.Parent == nil {
+			continue
+		}
+		first, last := leavesUnder(x)
+		var prev uint32
+		for k, l := range n.Parent.UnmergedLeaves {
+			if k > 0 && l <= prev {
+				return ErrBadUnmergedLeaves
+			}
+			prev = l
+			i := LeafIndex(l)
+			if i < first || i > last || t.Leaf(i) == nil {
+				return ErrBadUnmergedLeaves
+			}
+			for _, y := range directPath(i.NodeIndex(), t.Size()) {
+				if y == x {
+					break
+				}
+				m := t.Node(y)
+				if m == nil || m.Parent == nil {
+					continue
+				}
+				if !slices.Contains(m.Parent.UnmergedLeaves, l) {
+					return ErrBadUnmergedLeaves
+				}
+			}
+		}
+	}
+	return nil
+}
+
 // VerifyParentHashes checks that every non-blank parent node in the
 // tree was introduced by a member: each must be chained to a leaf by
 // a parent hash. A new member does this when it joins.

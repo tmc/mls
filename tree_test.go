@@ -6,6 +6,7 @@ package mls
 import (
 	"bytes"
 	"fmt"
+	"slices"
 	"testing"
 )
 
@@ -184,6 +185,120 @@ func TestVerifyNodeKeys(t *testing.T) {
 			tt.bad(tr)
 			if err := tr.verifyNodeKeys(); err != ErrDuplicateNodeKey {
 				t.Errorf("verifyNodeKeys = %v, want %v", err, ErrDuplicateNodeKey)
+			}
+		})
+	}
+}
+
+// unmergedGroup returns a group whose tree has a leaf that is
+// unmerged in a parent above it. That takes a tree wide enough to
+// survive a removal: eight members, remove leaf 5, a commit from leaf
+// 4 to repopulate the node two levels above the hole, then an Add
+// that refills leaf 5 under it. An added leaf is unmerged in every
+// parent above it that the committer's own path does not replace.
+// The parent directly above a blank leaf cannot be populated while
+// the leaf is blank, because the filtered direct path skips a parent
+// whose copath child resolves to nothing, so the entry appears one
+// level higher.
+func unmergedGroup(t *testing.T) *Group {
+	t.Helper()
+	cs := X25519AES128GCMSHA256Ed25519
+	alice := newTestClient(t, cs, "alice")
+	erin := newTestClient(t, cs, "erin")
+	g, err := alice.NewGroup([]byte("group"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	add := func(c *Client) *Proposal {
+		return &Proposal{Type: ProposalTypeAdd, Add: &Add{KeyPackage: *c.KeyPackage}}
+	}
+	ps := []*Proposal{
+		add(newTestClient(t, cs, "bob")),
+		add(newTestClient(t, cs, "carol")),
+		add(newTestClient(t, cs, "dave")),
+		add(erin),
+		add(newTestClient(t, cs, "frank")),
+		add(newTestClient(t, cs, "grace")),
+		add(newTestClient(t, cs, "heidi")),
+	}
+	g, _, w, err := g.Commit(ps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	eg, err := erin.Join(send(t, w).Welcome, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	g, msg, _, err := g.Commit([]*Proposal{{Type: ProposalTypeRemove, Remove: &Remove{Removed: 5}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if eg, err = eg.Handle(send(t, msg)); err != nil {
+		t.Fatal(err)
+	}
+	eg, msg, _, err = eg.Commit(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if g, err = g.Handle(send(t, msg)); err != nil {
+		t.Fatal(err)
+	}
+	if g, _, _, err = g.Commit([]*Proposal{add(newTestClient(t, cs, "ivan"))}); err != nil {
+		t.Fatal(err)
+	}
+	return g
+}
+
+// A parent's unmerged_leaves must name leaves below it, in order,
+// that are not blank and that the nodes in between agree on. The list
+// steers node resolution, and so who a commit encrypts path secrets
+// to. See RFC 9420, Section 12.4.3.1.
+func TestVerifyUnmergedLeaves(t *testing.T) {
+	g := unmergedGroup(t)
+	if err := g.Tree.verifyUnmergedLeaves(); err != nil {
+		t.Fatalf("a legitimate tree was rejected: %v", err)
+	}
+	// Node 11 covers leaves 4 through 7 and lists leaf 5, which
+	// the fixture exists to produce. Without it the cases below
+	// would prove nothing.
+	if n := g.Tree.Node(11); n == nil || n.Parent == nil || !slices.Contains(n.Parent.UnmergedLeaves, 5) {
+		t.Fatalf("fixture does not have leaf 5 unmerged at node 11")
+	}
+	for _, tt := range []struct {
+		name string
+		bad  func(RatchetTree)
+	}{
+		{"not below the node", func(tr RatchetTree) {
+			tr.Node(11).Parent.UnmergedLeaves = []uint32{0}
+		}},
+		{"out of range", func(tr RatchetTree) {
+			tr.Node(11).Parent.UnmergedLeaves = []uint32{99}
+		}},
+		{"out of order", func(tr RatchetTree) {
+			tr.Node(11).Parent.UnmergedLeaves = []uint32{6, 5}
+		}},
+		{"repeated", func(tr RatchetTree) {
+			tr.Node(11).Parent.UnmergedLeaves = []uint32{5, 5}
+		}},
+		{"blank leaf", func(tr RatchetTree) {
+			tr.Node(11).Parent.UnmergedLeaves = []uint32{4}
+			tr[LeafIndex(4).NodeIndex()] = nil
+		}},
+		{"intermediate node disagrees", func(tr RatchetTree) {
+			// Node 9 sits between leaf 5 and node 11. A
+			// group never populates it while leaf 5 is
+			// blank, but a tree that arrives in a Welcome
+			// can say anything.
+			tr[9] = &Node{Type: NodeTypeParent, Parent: &ParentNode{
+				EncryptionKey: []byte("not a key any member holds"),
+			}}
+		}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			tr := g.Tree.Clone()
+			tt.bad(tr)
+			if err := tr.verifyUnmergedLeaves(); err != ErrBadUnmergedLeaves {
+				t.Errorf("verifyUnmergedLeaves = %v, want %v", err, ErrBadUnmergedLeaves)
 			}
 		})
 	}
