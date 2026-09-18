@@ -80,11 +80,11 @@ func (c *Client) Join(w *Welcome, tree RatchetTree) (*Group, error) {
 	if err != nil {
 		return nil, err
 	}
-	if e := info.Extensions.Find(ExtensionTypeRatchetTree); e != nil {
-		tree = nil
-		if err := Unmarshal(e.Data, &tree); err != nil {
-			return nil, err
-		}
+	var carried RatchetTree
+	if ok, err := info.Extensions.Get(ExtensionTypeRatchetTree, &carried); err != nil {
+		return nil, err
+	} else if ok {
+		tree = carried
 	}
 	if tree == nil {
 		return nil, ErrNoRatchetTree

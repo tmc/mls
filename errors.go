@@ -105,3 +105,8 @@ var (
 	errOwnCommit           = errors.New("mls: cannot apply one's own commit")
 	errUnsupportedProposal = errors.New("mls: unsupported proposal type")
 )
+
+// ErrDuplicateExtension is reported for a list of extensions holding
+// more than one extension of the same type, which RFC 9420,
+// Section 13.4 forbids.
+var ErrDuplicateExtension = errors.New("mls: duplicate extension")
