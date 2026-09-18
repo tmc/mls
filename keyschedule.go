@@ -59,13 +59,30 @@ func NewKeySchedule(cs CipherSuite, joinerSecret, pskSecret []byte, ctx *GroupCo
 	if err != nil {
 		return nil, err
 	}
-	ks := &KeySchedule{CipherSuite: cs, JoinerSecret: joinerSecret}
-	if ks.WelcomeSecret, err = cs.DeriveSecret(member, "welcome"); err != nil {
+	welcomeSecret, err := cs.DeriveSecret(member, "welcome")
+	if err != nil {
 		return nil, err
 	}
-	if ks.EpochSecret, err = cs.ExpandWithLabel(member, "epoch", b, uint16(cs.HashSize())); err != nil {
+	epochSecret, err := cs.ExpandWithLabel(member, "epoch", b, uint16(cs.HashSize()))
+	if err != nil {
 		return nil, err
 	}
+	ks, err := newEpochSchedule(cs, epochSecret)
+	if err != nil {
+		return nil, err
+	}
+	ks.JoinerSecret = joinerSecret
+	ks.WelcomeSecret = welcomeSecret
+	return ks, nil
+}
+
+// newEpochSchedule derives the secrets of an epoch from the epoch
+// secret itself. Group creation starts here, with a fresh random
+// epoch secret; every later epoch reaches the same point through
+// [NewKeySchedule]. See RFC 9420, Section 11.
+func newEpochSchedule(cs CipherSuite, epochSecret []byte) (*KeySchedule, error) {
+	ks := &KeySchedule{CipherSuite: cs, EpochSecret: epochSecret}
+	var err error
 	for _, d := range []struct {
 		label string
 		dst   *[]byte
