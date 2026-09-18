@@ -1,0 +1,338 @@
+package mls
+
+import (
+	"crypto"
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/ecdh"
+	"crypto/ecdsa"
+	"crypto/ed25519"
+	"crypto/elliptic"
+	"crypto/hkdf"
+	"crypto/hpke"
+	"crypto/rand"
+	"crypto/sha256"
+	"crypto/sha512"
+	"errors"
+	"fmt"
+	"hash"
+
+	"github.com/tmc/mls/tlssyntax"
+)
+
+// ErrUnsupportedCipherSuite is reported for cipher suites this
+// package cannot implement. RFC 9420 suites 4 and 6 use X448 and
+// Ed448, which the Go standard library does not provide.
+var ErrUnsupportedCipherSuite = errors.New("mls: unsupported cipher suite")
+
+// A signatureScheme is the signature algorithm of a cipher suite.
+type signatureScheme int
+
+const (
+	signatureEd25519 signatureScheme = iota
+	signatureECDSA
+)
+
+// params are the cryptographic primitives of a cipher suite.
+// See RFC 9420, Section 17.1.
+type params struct {
+	hash      crypto.Hash
+	newHash   func() hash.Hash
+	curve     ecdh.Curve
+	kdf       func() hpke.KDF
+	aead      func() hpke.AEAD
+	keySize   int  // AEAD key size, Nk
+	nonceSize int  // AEAD nonce size, Nn
+	chacha    bool // AEAD is ChaCha20-Poly1305
+	sig       signatureScheme
+	sigCurve  elliptic.Curve // sig == signatureECDSA
+}
+
+// suiteParams[cs] is nil for cipher suites this package cannot
+// implement.
+var suiteParams = map[CipherSuite]*params{
+	X25519AES128GCMSHA256Ed25519: {
+		hash: crypto.SHA256, newHash: sha256.New, curve: ecdh.X25519(),
+		kdf: hpke.HKDFSHA256, aead: hpke.AES128GCM, keySize: 16, nonceSize: 12,
+		sig: signatureEd25519,
+	},
+	P256AES128GCMSHA256P256: {
+		hash: crypto.SHA256, newHash: sha256.New, curve: ecdh.P256(),
+		kdf: hpke.HKDFSHA256, aead: hpke.AES128GCM, keySize: 16, nonceSize: 12,
+		sig: signatureECDSA, sigCurve: elliptic.P256(),
+	},
+	X25519ChaCha20Poly1305SHA256Ed25519: {
+		hash: crypto.SHA256, newHash: sha256.New, curve: ecdh.X25519(),
+		kdf: hpke.HKDFSHA256, aead: hpke.ChaCha20Poly1305, keySize: 32, nonceSize: 12, chacha: true,
+		sig: signatureEd25519,
+	},
+	P521AES256GCMSHA512P521: {
+		hash: crypto.SHA512, newHash: sha512.New, curve: ecdh.P521(),
+		kdf: hpke.HKDFSHA512, aead: hpke.AES256GCM, keySize: 32, nonceSize: 12,
+		sig: signatureECDSA, sigCurve: elliptic.P521(),
+	},
+	P384AES256GCMSHA384P384: {
+		hash: crypto.SHA384, newHash: sha512.New384, curve: ecdh.P384(),
+		kdf: hpke.HKDFSHA384, aead: hpke.AES256GCM, keySize: 32, nonceSize: 12,
+		sig: signatureECDSA, sigCurve: elliptic.P384(),
+	},
+}
+
+func (cs CipherSuite) params() (*params, error) {
+	p := suiteParams[cs]
+	if p == nil {
+		return nil, fmt.Errorf("%w %d", ErrUnsupportedCipherSuite, cs)
+	}
+	return p, nil
+}
+
+// Supported reports whether this package implements cs.
+func (cs CipherSuite) Supported() bool { return suiteParams[cs] != nil }
+
+// HashSize returns the output size of the cipher suite's hash
+// function, called Nh in RFC 9420.
+func (cs CipherSuite) HashSize() int {
+	p, err := cs.params()
+	if err != nil {
+		return 0
+	}
+	return p.hash.Size()
+}
+
+// Hash returns the cipher suite's hash of data.
+func (cs CipherSuite) Hash(data []byte) ([]byte, error) {
+	p, err := cs.params()
+	if err != nil {
+		return nil, err
+	}
+	h := p.newHash()
+	h.Write(data)
+	return h.Sum(nil), nil
+}
+
+// labeled prefixes label with "MLS 1.0 ", the domain separator every
+// labeled operation in RFC 9420 uses.
+func labeled(label string) []byte { return []byte("MLS 1.0 " + label) }
+
+// ExpandWithLabel implements the function of the same name in
+// RFC 9420, Section 8: it expands secret into length bytes, bound to
+// label and context.
+func (cs CipherSuite) ExpandWithLabel(secret []byte, label string, context []byte, length uint16) ([]byte, error) {
+	p, err := cs.params()
+	if err != nil {
+		return nil, err
+	}
+	info, err := tlssyntax.Marshal(tlssyntax.MarshalerFunc(func(w *tlssyntax.Writer) {
+		w.WriteUint16(length)
+		w.WriteOpaque(labeled(label))
+		w.WriteOpaque(context)
+	}))
+	if err != nil {
+		return nil, err
+	}
+	return hkdf.Expand(p.newHash, secret, string(info), int(length))
+}
+
+// DeriveSecret is ExpandWithLabel with an empty context and an output
+// the size of the cipher suite's hash. See RFC 9420, Section 8.
+func (cs CipherSuite) DeriveSecret(secret []byte, label string) ([]byte, error) {
+	return cs.ExpandWithLabel(secret, label, nil, uint16(cs.HashSize()))
+}
+
+// DeriveTreeSecret is ExpandWithLabel with the generation as context.
+// See RFC 9420, Section 9.
+func (cs CipherSuite) DeriveTreeSecret(secret []byte, label string, generation uint32, length uint16) ([]byte, error) {
+	ctx, err := tlssyntax.Marshal(tlssyntax.MarshalerFunc(func(w *tlssyntax.Writer) {
+		w.WriteUint32(generation)
+	}))
+	if err != nil {
+		return nil, err
+	}
+	return cs.ExpandWithLabel(secret, label, ctx, length)
+}
+
+// Extract is the HKDF extract step of the key schedule.
+func (cs CipherSuite) Extract(salt, ikm []byte) ([]byte, error) {
+	p, err := cs.params()
+	if err != nil {
+		return nil, err
+	}
+	return hkdf.Extract(p.newHash, ikm, salt)
+}
+
+// RefHash computes the labeled hash used to reference key packages
+// and proposals. See RFC 9420, Section 5.2.
+func (cs CipherSuite) RefHash(label string, value []byte) ([]byte, error) {
+	b, err := tlssyntax.Marshal(tlssyntax.MarshalerFunc(func(w *tlssyntax.Writer) {
+		w.WriteOpaque([]byte(label))
+		w.WriteOpaque(value)
+	}))
+	if err != nil {
+		return nil, err
+	}
+	return cs.Hash(b)
+}
+
+// signContent is the input to SignWithLabel and VerifyWithLabel.
+func signContent(label string, content []byte) ([]byte, error) {
+	return tlssyntax.Marshal(tlssyntax.MarshalerFunc(func(w *tlssyntax.Writer) {
+		w.WriteOpaque(labeled(label))
+		w.WriteOpaque(content)
+	}))
+}
+
+// SignWithLabel signs content with priv, binding the signature to
+// label. See RFC 9420, Section 5.1.2.
+func (cs CipherSuite) SignWithLabel(priv []byte, label string, content []byte) ([]byte, error) {
+	p, err := cs.params()
+	if err != nil {
+		return nil, err
+	}
+	msg, err := signContent(label, content)
+	if err != nil {
+		return nil, err
+	}
+	switch p.sig {
+	case signatureEd25519:
+		if len(priv) != ed25519.SeedSize {
+			return nil, errors.New("mls: bad Ed25519 private key size")
+		}
+		return ed25519.Sign(ed25519.NewKeyFromSeed(priv), msg), nil
+	default:
+		key, err := ecdsa.ParseRawPrivateKey(p.sigCurve, priv)
+		if err != nil {
+			return nil, err
+		}
+		h := p.newHash()
+		h.Write(msg)
+		return ecdsa.SignASN1(rand.Reader, key, h.Sum(nil))
+	}
+}
+
+// ErrBadSignature is reported when a signature does not verify.
+var ErrBadSignature = errors.New("mls: signature does not verify")
+
+// VerifyWithLabel checks a signature produced by SignWithLabel.
+func (cs CipherSuite) VerifyWithLabel(pub SignaturePublicKey, label string, content, sig []byte) error {
+	p, err := cs.params()
+	if err != nil {
+		return err
+	}
+	msg, err := signContent(label, content)
+	if err != nil {
+		return err
+	}
+	switch p.sig {
+	case signatureEd25519:
+		if len(pub) != ed25519.PublicKeySize {
+			return errors.New("mls: bad Ed25519 public key size")
+		}
+		if !ed25519.Verify(ed25519.PublicKey(pub), msg, sig) {
+			return ErrBadSignature
+		}
+	default:
+		key, err := ecdsa.ParseUncompressedPublicKey(p.sigCurve, pub)
+		if err != nil {
+			return err
+		}
+		h := p.newHash()
+		h.Write(msg)
+		if !ecdsa.VerifyASN1(key, h.Sum(nil), sig) {
+			return ErrBadSignature
+		}
+	}
+	return nil
+}
+
+// encryptContext is the HPKE info string for EncryptWithLabel.
+func encryptContext(label string, context []byte) ([]byte, error) {
+	return tlssyntax.Marshal(tlssyntax.MarshalerFunc(func(w *tlssyntax.Writer) {
+		w.WriteOpaque(labeled(label))
+		w.WriteOpaque(context)
+	}))
+}
+
+// EncryptWithLabel encrypts plaintext to pub under label and context,
+// returning the HPKE encapsulated key and the ciphertext.
+// See RFC 9420, Section 5.1.3.
+func (cs CipherSuite) EncryptWithLabel(pub HPKEPublicKey, label string, context, plaintext []byte) (*HPKECiphertext, error) {
+	p, err := cs.params()
+	if err != nil {
+		return nil, err
+	}
+	info, err := encryptContext(label, context)
+	if err != nil {
+		return nil, err
+	}
+	key, err := hpke.DHKEM(p.curve).NewPublicKey(pub)
+	if err != nil {
+		return nil, err
+	}
+	enc, sender, err := hpke.NewSender(key, p.kdf(), p.aead(), info)
+	if err != nil {
+		return nil, err
+	}
+	ct, err := sender.Seal(nil, plaintext)
+	if err != nil {
+		return nil, err
+	}
+	return &HPKECiphertext{KEMOutput: enc, Ciphertext: ct}, nil
+}
+
+// DecryptWithLabel reverses EncryptWithLabel.
+func (cs CipherSuite) DecryptWithLabel(priv []byte, label string, context []byte, ct *HPKECiphertext) ([]byte, error) {
+	p, err := cs.params()
+	if err != nil {
+		return nil, err
+	}
+	info, err := encryptContext(label, context)
+	if err != nil {
+		return nil, err
+	}
+	key, err := hpke.DHKEM(p.curve).NewPrivateKey(priv)
+	if err != nil {
+		return nil, err
+	}
+	r, err := hpke.NewRecipient(ct.KEMOutput, key, p.kdf(), p.aead(), info)
+	if err != nil {
+		return nil, err
+	}
+	return r.Open(nil, ct.Ciphertext)
+}
+
+// AEADKeySize and AEADNonceSize return the key and nonce sizes of the
+// cipher suite's AEAD, called Nk and Nn in RFC 9420.
+func (cs CipherSuite) AEADKeySize() int {
+	p, err := cs.params()
+	if err != nil {
+		return 0
+	}
+	return p.keySize
+}
+
+func (cs CipherSuite) AEADNonceSize() int {
+	p, err := cs.params()
+	if err != nil {
+		return 0
+	}
+	return p.nonceSize
+}
+
+// AEAD returns the cipher suite's AEAD keyed with key. Cipher suites
+// whose AEAD is ChaCha20-Poly1305 report ErrUnsupportedCipherSuite:
+// the Go standard library exposes that construction only through
+// crypto/hpke.
+func (cs CipherSuite) AEAD(key []byte) (cipher.AEAD, error) {
+	p, err := cs.params()
+	if err != nil {
+		return nil, err
+	}
+	if p.chacha {
+		return nil, fmt.Errorf("%w %d: ChaCha20-Poly1305 is not available outside HPKE", ErrUnsupportedCipherSuite, cs)
+	}
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, err
+	}
+	return cipher.NewGCM(block)
+}

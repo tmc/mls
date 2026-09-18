@@ -134,3 +134,9 @@ func (w *Writer) WriteOptional(f func(w *Writer)) {
 // ErrUnknownVariant is the error recorded when a value carries a
 // variant tag the encoder does not know how to encode.
 var ErrUnknownVariant = errors.New("tlssyntax: unknown variant")
+
+// A MarshalerFunc adapts an ordinary function to the Marshaler
+// interface, for one-off structures that need no named type.
+type MarshalerFunc func(w *Writer)
+
+func (f MarshalerFunc) MarshalTLS(w *Writer) { f(w) }

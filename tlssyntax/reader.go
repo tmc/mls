@@ -214,3 +214,9 @@ func (r *Reader) ReadAll(read func(r *Reader)) {
 // ErrMalformed is the error decoders record for input that is
 // syntactically valid but not a legal protocol value.
 var ErrMalformed = errors.New("tlssyntax: malformed value")
+
+// An UnmarshalerFunc adapts an ordinary function to the Unmarshaler
+// interface, for one-off structures that need no named type.
+type UnmarshalerFunc func(r *Reader)
+
+func (f UnmarshalerFunc) UnmarshalTLS(r *Reader) { f(r) }
