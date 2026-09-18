@@ -255,7 +255,9 @@ func (t *RatchetTree) MergeUpdatePath(cs CipherSuite, i LeafIndex, up *UpdatePat
 	if !bytes.Equal(hash, leaf.ParentHash) {
 		return ErrBadParentHash
 	}
-	return nil
+	// None of the keys the path introduces may already be in the
+	// tree. See RFC 9420, Section 12.4.
+	return t.verifyNodeKeys()
 }
 
 // DecryptPathSecrets recovers from an update path sent by the member

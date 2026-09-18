@@ -71,6 +71,11 @@ var ErrPathRequired = errors.New("mls: commit requires an update path")
 // losing the message does.
 var ErrGenerationJump = errors.New("mls: message generation is too far ahead")
 
+// ErrDuplicateNodeKey is reported for a ratchet tree in which one
+// encryption key appears at more than one node. Whoever holds that
+// key's private half can read both positions.
+var ErrDuplicateNodeKey = errors.New("mls: encryption key appears at more than one node")
+
 // ErrEmptyTree is reported for a ratchet tree with no leaves. A group
 // always has at least one member, so an empty tree is malformed.
 var ErrEmptyTree = errors.New("mls: ratchet tree is empty")

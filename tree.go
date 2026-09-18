@@ -224,6 +224,32 @@ func leavesUnder(x NodeIndex) (first, last LeafIndex) {
 	return (x &^ mask).LeafIndex(), ((x | mask) - 1).LeafIndex()
 }
 
+// verifyNodeKeys checks that no encryption key appears at two nodes
+// of the tree. A key at two positions is a key whose holder can read
+// both, which is what the parent hashes and the update path rules are
+// there to prevent. See RFC 9420, Sections 12.4 and 12.4.3.1.
+func (t RatchetTree) verifyNodeKeys() error {
+	seen := make(map[string]NodeIndex, len(t))
+	for x := NodeIndex(0); int(x) < len(t); x++ {
+		var key []byte
+		switch n := t.Node(x); {
+		case n == nil:
+			continue
+		case n.Leaf != nil:
+			key = n.Leaf.EncryptionKey
+		case n.Parent != nil:
+			key = n.Parent.EncryptionKey
+		default:
+			continue
+		}
+		if _, ok := seen[string(key)]; ok {
+			return ErrDuplicateNodeKey
+		}
+		seen[string(key)] = x
+	}
+	return nil
+}
+
 // VerifyParentHashes checks that every non-blank parent node in the
 // tree was introduced by a member: each must be chained to a leaf by
 // a parent hash. A new member does this when it joins.

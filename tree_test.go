@@ -5,6 +5,7 @@ package mls
 
 import (
 	"bytes"
+	"fmt"
 	"testing"
 )
 
@@ -119,5 +120,71 @@ func TestTreeOperationVectors(t *testing.T) {
 		} else if !bytes.Equal(got, vec.TreeHashAfter) {
 			t.Errorf("vector %d: tree hash after = %x, want %x", i, got, vec.TreeHashAfter)
 		}
+	}
+}
+
+// groupOf returns the committer's view of a group of n members.
+func groupOf(t *testing.T, n int) *Group {
+	t.Helper()
+	cs := X25519AES128GCMSHA256Ed25519
+	alice := newTestClient(t, cs, "alice")
+	g, err := alice.NewGroup([]byte("group"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ps []*Proposal
+	for i := 1; i < n; i++ {
+		c := newTestClient(t, cs, fmt.Sprintf("member%d", i))
+		ps = append(ps, &Proposal{Type: ProposalTypeAdd, Add: &Add{KeyPackage: *c.KeyPackage}})
+	}
+	if g, _, _, err = g.Commit(ps); err != nil {
+		t.Fatal(err)
+	}
+	return g
+}
+
+// parents returns the indices of the tree's non-blank parent nodes.
+func parents(t RatchetTree) []NodeIndex {
+	var xs []NodeIndex
+	for x := NodeIndex(1); int(x) < len(t); x += 2 {
+		if n := t.Node(x); n != nil && n.Parent != nil {
+			xs = append(xs, x)
+		}
+	}
+	return xs
+}
+
+// One encryption key must not appear at two nodes: its holder reads
+// both. See RFC 9420, Section 12.4.
+func TestVerifyNodeKeys(t *testing.T) {
+	g := groupOf(t, 4)
+	if err := g.Tree.verifyNodeKeys(); err != nil {
+		t.Fatalf("a legitimate tree was rejected: %v", err)
+	}
+	xs := parents(g.Tree)
+	if len(xs) < 2 {
+		t.Fatalf("tree has %d populated parents, want at least 2", len(xs))
+	}
+	for _, tt := range []struct {
+		name string
+		bad  func(RatchetTree)
+	}{
+		{"parent at a parent", func(tr RatchetTree) {
+			tr.Node(xs[1]).Parent.EncryptionKey = tr.Node(xs[0]).Parent.EncryptionKey
+		}},
+		{"parent at a leaf", func(tr RatchetTree) {
+			tr.Leaf(1).EncryptionKey = tr.Node(xs[0]).Parent.EncryptionKey
+		}},
+		{"leaf at a leaf", func(tr RatchetTree) {
+			tr.Leaf(1).EncryptionKey = tr.Leaf(0).EncryptionKey
+		}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			tr := g.Tree.Clone()
+			tt.bad(tr)
+			if err := tr.verifyNodeKeys(); err != ErrDuplicateNodeKey {
+				t.Errorf("verifyNodeKeys = %v, want %v", err, ErrDuplicateNodeKey)
+			}
+		})
 	}
 }
