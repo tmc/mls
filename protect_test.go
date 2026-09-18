@@ -221,3 +221,61 @@ func TestMessageProtectionVectors(t *testing.T) {
 		})
 	}
 }
+
+// The sender data names the leaf a message comes from, and is sealed
+// under a secret every member of the epoch holds. A member can
+// therefore name another member's leaf; a message that does not
+// decrypt must not spend that leaf's keys.
+func TestSenderDataDoesNotSpendKeys(t *testing.T) {
+	a, b, c := threeMember(t)
+	cs := a.CipherSuite
+
+	// Carol forges sender data naming Bob's leaf.
+	m, err := c.Protect(nil, []byte("filler"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	forged, err := m.PrivateMessage.sealSenderData(cs, c.Schedule.SenderDataSecret, &SenderData{
+		LeafIndex:  uint32(b.Index),
+		Generation: 20,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.PrivateMessage.EncryptedSenderData = forged
+	if _, err := a.Unprotect(send(t, m)); err == nil {
+		t.Fatal("a forged message decrypted")
+	}
+
+	// Bob's own message must still be readable.
+	real, err := b.Protect(nil, []byte("hello"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.Unprotect(send(t, real)); err != nil {
+		t.Errorf("a rejected message silenced leaf %d: %v", b.Index, err)
+	}
+}
+
+// A generation far ahead of the ratchet costs one derivation per
+// step, so it must be refused rather than walked.
+func TestSenderDataGenerationBound(t *testing.T) {
+	a, b, _ := threeMember(t)
+	cs := a.CipherSuite
+
+	m, err := b.Protect(nil, []byte("hello"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	forged, err := m.PrivateMessage.sealSenderData(cs, b.Schedule.SenderDataSecret, &SenderData{
+		LeafIndex:  uint32(b.Index),
+		Generation: 1 << 31,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.PrivateMessage.EncryptedSenderData = forged
+	if _, err := a.Unprotect(send(t, m)); err != ErrGenerationJump {
+		t.Errorf("Unprotect = %v, want %v", err, ErrGenerationJump)
+	}
+}

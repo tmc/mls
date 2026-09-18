@@ -109,7 +109,7 @@ func (m *PrivateMessage) AuthenticatedContent(cs CipherSuite, tree *SecretTree, 
 	if err != nil {
 		return nil, err
 	}
-	key, nonce, err := r.Key(data.Generation)
+	key, nonce, advance, err := r.Key(data.Generation)
 	if err != nil {
 		return nil, err
 	}
@@ -119,8 +119,13 @@ func (m *PrivateMessage) AuthenticatedContent(cs CipherSuite, tree *SecretTree, 
 	}
 	plaintext, err := aead.Open(nil, applyGuard(nonce, data.ReuseGuard), m.Ciphertext, m.contentAAD())
 	if err != nil {
+		// The ratchet is left where it was. Any member of the
+		// epoch can write any leaf index into the sender data,
+		// so a message that does not decrypt must not be able
+		// to spend the keys of the leaf it names.
 		return nil, err
 	}
+	advance()
 
 	c := &AuthenticatedContent{
 		WireFormat: WireFormatPrivateMessage,

@@ -66,6 +66,11 @@ var ErrBlankParent = errors.New("mls: node is blank or is not a parent")
 // and a member the commit removes can follow the group.
 var ErrPathRequired = errors.New("mls: commit requires an update path")
 
+// ErrGenerationJump is reported for a message whose generation is so
+// far ahead of the ratchet that reaching it would cost more than
+// losing the message does.
+var ErrGenerationJump = errors.New("mls: message generation is too far ahead")
+
 // ErrEmptyTree is reported for a ratchet tree with no leaves. A group
 // always has at least one member, so an empty tree is malformed.
 var ErrEmptyTree = errors.New("mls: ratchet tree is empty")

@@ -59,10 +59,11 @@ func TestSecretTreeVectors(t *testing.T) {
 						t.Fatalf("leaf %d: Ratchet: %v", i, err)
 					}
 					for _, step := range steps {
-						key, nonce, err := r.Key(step.Generation)
+						key, nonce, advance, err := r.Key(step.Generation)
 						if err != nil {
 							t.Fatalf("leaf %d: Key(%d): %v", i, step.Generation, err)
 						}
+						advance()
 						wantKey, wantNonce := step.ApplicationKey, step.ApplicationNonce
 						if ct != ContentTypeApplication {
 							wantKey, wantNonce = step.HandshakeKey, step.HandshakeNonce
@@ -78,5 +79,36 @@ func TestSecretTreeVectors(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// A ratchet is spent only when the caller says so, and refuses a jump
+// it cannot afford.
+func TestRatchetKeyBounds(t *testing.T) {
+	cs := X25519AES128GCMSHA256Ed25519
+	tr := NewSecretTree(cs, 2, make([]byte, cs.HashSize()))
+	r, err := tr.Ratchet(0, ContentTypeApplication)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, err := r.Key(maxGenerationJump + 1); err != ErrGenerationJump {
+		t.Errorf("Key(maxGenerationJump+1) = %v, want %v", err, ErrGenerationJump)
+	}
+	if r.Generation() != 0 {
+		t.Errorf("a refused jump advanced the ratchet to %d", r.Generation())
+	}
+	_, _, advance, err := r.Key(3)
+	if err != nil {
+		t.Fatalf("Key(3): %v", err)
+	}
+	if r.Generation() != 0 {
+		t.Errorf("generation = %d before advance, want 0", r.Generation())
+	}
+	advance()
+	if r.Generation() != 4 {
+		t.Errorf("generation = %d after advance, want 4", r.Generation())
+	}
+	if _, _, _, err := r.Key(3); err != ErrConsumed {
+		t.Errorf("Key(3) replayed = %v, want %v", err, ErrConsumed)
 	}
 }

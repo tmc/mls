@@ -137,22 +137,37 @@ func (r *Ratchet) Next() (key, nonce []byte, err error) {
 	return key, nonce, nil
 }
 
-// Key returns the key and nonce for a particular generation,
-// advancing the ratchet past it. Generations in between are skipped
-// and their keys discarded, and a generation the ratchet has already
-// passed is gone: RFC 9420, Section 9.2 requires that keys be deleted
-// as they are consumed.
-func (r *Ratchet) Key(generation uint32) (key, nonce []byte, err error) {
+// maxGenerationJump bounds how far ahead of a ratchet a message may
+// claim to be. Reaching a generation costs one derivation per step,
+// so an unbounded jump is hours of work asked for by one message, and
+// the sender data that carries the generation is authenticated only
+// by a secret every member of the epoch holds. The bound is the run
+// of lost messages a receiver is willing to ride out.
+const maxGenerationJump = 1024
+
+// Key returns the key and nonce for a generation at or after the one
+// the ratchet has reached, along with a function that advances the
+// ratchet past it. The caller must advance only once the message has
+// been authenticated: a message that does not decrypt must not
+// consume the keys of the member it claims to come from. Generations
+// in between are skipped and their keys discarded, and a generation
+// the ratchet has already passed is gone: RFC 9420, Section 9.2
+// requires that keys be deleted as they are consumed.
+func (r *Ratchet) Key(generation uint32) (key, nonce []byte, advance func(), err error) {
 	if generation < r.generation {
-		return nil, nil, ErrConsumed
+		return nil, nil, nil, ErrConsumed
 	}
+	if generation-r.generation > maxGenerationJump {
+		return nil, nil, nil, ErrGenerationJump
+	}
+	ahead := &Ratchet{cs: r.cs, secret: r.secret, generation: r.generation}
 	for {
-		key, nonce, err := r.Next()
+		key, nonce, err := ahead.Next()
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
-		if r.generation == generation+1 {
-			return key, nonce, nil
+		if ahead.generation == generation+1 {
+			return key, nonce, func() { r.secret, r.generation = ahead.secret, ahead.generation }, nil
 		}
 	}
 }
