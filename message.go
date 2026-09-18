@@ -1,16 +1,6 @@
 package mls
 
-import (
-	"errors"
-
-	"github.com/tmc/mls/tlssyntax"
-)
-
-// ErrUnsupportedWireFormat is returned for the PublicMessage and
-// PrivateMessage wire formats, which this package does not yet
-// implement. They require the framing structures of RFC 9420,
-// Section 6.
-var ErrUnsupportedWireFormat = errors.New("mls: unsupported wire format")
+import "github.com/tmc/mls/tlssyntax"
 
 // An MLSMessage is the outermost structure of the protocol: everything
 // sent between clients and the delivery service is one of these.
@@ -20,23 +10,27 @@ type MLSMessage struct {
 	Version    ProtocolVersion
 	WireFormat WireFormat
 
-	Welcome    *Welcome    // WireFormat == WireFormatWelcome
-	GroupInfo  *GroupInfo  // WireFormat == WireFormatGroupInfo
-	KeyPackage *KeyPackage // WireFormat == WireFormatKeyPackage
+	PublicMessage  *PublicMessage  // WireFormat == WireFormatPublicMessage
+	PrivateMessage *PrivateMessage // WireFormat == WireFormatPrivateMessage
+	Welcome        *Welcome        // WireFormat == WireFormatWelcome
+	GroupInfo      *GroupInfo      // WireFormat == WireFormatGroupInfo
+	KeyPackage     *KeyPackage     // WireFormat == WireFormatKeyPackage
 }
 
 func (m *MLSMessage) MarshalTLS(w *tlssyntax.Writer) {
 	w.WriteUint16(uint16(m.Version))
 	w.WriteUint16(uint16(m.WireFormat))
 	switch {
+	case m.WireFormat == WireFormatPublicMessage && m.PublicMessage != nil:
+		m.PublicMessage.MarshalTLS(w)
+	case m.WireFormat == WireFormatPrivateMessage && m.PrivateMessage != nil:
+		m.PrivateMessage.MarshalTLS(w)
 	case m.WireFormat == WireFormatWelcome && m.Welcome != nil:
 		m.Welcome.MarshalTLS(w)
 	case m.WireFormat == WireFormatGroupInfo && m.GroupInfo != nil:
 		m.GroupInfo.MarshalTLS(w)
 	case m.WireFormat == WireFormatKeyPackage && m.KeyPackage != nil:
 		m.KeyPackage.MarshalTLS(w)
-	case m.WireFormat == WireFormatPublicMessage, m.WireFormat == WireFormatPrivateMessage:
-		w.SetError(ErrUnsupportedWireFormat)
 	default:
 		w.SetError(errUnknown("wire format", uint64(m.WireFormat)))
 	}
@@ -47,6 +41,12 @@ func (m *MLSMessage) UnmarshalTLS(r *tlssyntax.Reader) {
 	m.Version = ProtocolVersion(r.ReadUint16())
 	m.WireFormat = WireFormat(r.ReadUint16())
 	switch m.WireFormat {
+	case WireFormatPublicMessage:
+		m.PublicMessage = new(PublicMessage)
+		m.PublicMessage.UnmarshalTLS(r)
+	case WireFormatPrivateMessage:
+		m.PrivateMessage = new(PrivateMessage)
+		m.PrivateMessage.UnmarshalTLS(r)
 	case WireFormatWelcome:
 		m.Welcome = new(Welcome)
 		m.Welcome.UnmarshalTLS(r)
@@ -56,8 +56,6 @@ func (m *MLSMessage) UnmarshalTLS(r *tlssyntax.Reader) {
 	case WireFormatKeyPackage:
 		m.KeyPackage = new(KeyPackage)
 		m.KeyPackage.UnmarshalTLS(r)
-	case WireFormatPublicMessage, WireFormatPrivateMessage:
-		r.SetError(ErrUnsupportedWireFormat)
 	default:
 		if r.Err() == nil {
 			r.SetError(errUnknown("wire format", uint64(m.WireFormat)))

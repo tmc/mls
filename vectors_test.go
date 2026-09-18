@@ -33,22 +33,21 @@ var messageFields = map[string]func() message{
 	"update_proposal":                   func() message { return new(Update) },
 	"remove_proposal":                   func() message { return new(Remove) },
 	"group_context_extensions_proposal": func() message { return new(GroupContextExtensions) },
+	"pre_shared_key_proposal":           func() message { return new(PreSharedKey) },
+	"re_init_proposal":                  func() message { return new(ReInit) },
+	"external_init_proposal":            func() message { return new(ExternalInit) },
+	"group_secrets":                     func() message { return new(GroupSecrets) },
+	"commit":                            func() message { return new(Commit) },
+	"public_message_application":        func() message { return new(MLSMessage) },
+	"public_message_proposal":           func() message { return new(MLSMessage) },
+	"public_message_commit":             func() message { return new(MLSMessage) },
+	"private_message":                   func() message { return new(MLSMessage) },
 }
 
 // unsupportedFields are the fields of the "messages" test vector whose
 // structures this package does not implement yet. Listing them keeps
 // TestMessageVectors from quietly ignoring a field it ought to cover.
-var unsupportedFields = map[string]string{
-	"group_secrets":              "GroupSecrets, RFC 9420 §12.4.3.1",
-	"pre_shared_key_proposal":    "PreSharedKey, RFC 9420 §12.1.4",
-	"re_init_proposal":           "ReInit, RFC 9420 §12.1.5",
-	"external_init_proposal":     "ExternalInit, RFC 9420 §12.1.6",
-	"commit":                     "Commit, RFC 9420 §12.4",
-	"public_message_application": "PublicMessage, RFC 9420 §6.2",
-	"public_message_proposal":    "PublicMessage, RFC 9420 §6.2",
-	"public_message_commit":      "PublicMessage, RFC 9420 §6.2",
-	"private_message":            "PrivateMessage, RFC 9420 §6.3",
-}
+var unsupportedFields = map[string]string{}
 
 func TestMessageVectors(t *testing.T) {
 	data, err := os.ReadFile("testdata/messages.json")

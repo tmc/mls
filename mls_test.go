@@ -3,7 +3,6 @@ package mls
 import (
 	"bytes"
 	"encoding/hex"
-	"errors"
 	"testing"
 )
 
@@ -83,16 +82,6 @@ func TestUnknownVariant(t *testing.T) {
 	for _, tt := range tests {
 		if err := Unmarshal(mustHex(t, tt.enc), tt.val); err == nil {
 			t.Errorf("%s: Unmarshal of unknown variant succeeded, want error", tt.name)
-		}
-	}
-}
-
-func TestUnsupportedWireFormat(t *testing.T) {
-	for _, f := range []WireFormat{WireFormatPublicMessage, WireFormatPrivateMessage} {
-		enc := []byte{0x00, 0x01, byte(f >> 8), byte(f)}
-		err := Unmarshal(enc, new(MLSMessage))
-		if !errors.Is(err, ErrUnsupportedWireFormat) {
-			t.Errorf("%s: Unmarshal = %v, want ErrUnsupportedWireFormat", f, err)
 		}
 	}
 }
