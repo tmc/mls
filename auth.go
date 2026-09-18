@@ -39,7 +39,7 @@ func (c *AuthenticatedContent) signedContent(version ProtocolVersion, ctx *Group
 		switch c.Content.Sender.Type {
 		case SenderTypeMember, SenderTypeNewMemberCommit:
 			if ctx == nil {
-				w.SetError(errMissingGroupContext)
+				w.SetError(ErrMissingGroupContext)
 				return
 			}
 			ctx.MarshalTLS(w)

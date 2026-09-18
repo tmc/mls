@@ -17,7 +17,7 @@ import (
 // the epoch before it. commit must be a commit.
 func (cs CipherSuite) ConfirmedTranscriptHash(interim []byte, commit *AuthenticatedContent) ([]byte, error) {
 	if commit.Content.ContentType != ContentTypeCommit {
-		return nil, errNotCommit
+		return nil, ErrNotCommit
 	}
 	b, err := tlssyntax.Marshal(tlssyntax.MarshalerFunc(func(w *tlssyntax.Writer) {
 		w.WriteRaw(interim)

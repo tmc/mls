@@ -18,24 +18,24 @@ func errUnknown(kind string, v uint64) error {
 	return fmt.Errorf("%w: %s %d", ErrUnknownVariant, kind, v)
 }
 
-// errMissingGroupContext is reported when signing or verifying
+// ErrMissingGroupContext is reported when signing or verifying
 // content whose sender type requires the group context, without one.
-var errMissingGroupContext = errors.New("mls: group context required for this sender type")
+var ErrMissingGroupContext = errors.New("mls: group context required for this sender type")
 
-// errPSKCount is reported when the pre-shared key identifiers and the
+// ErrPSKCount is reported when the pre-shared key identifiers and the
 // key material given for them do not correspond.
-var errPSKCount = errors.New("mls: pre-shared key count does not match identifier count")
+var ErrPSKCount = errors.New("mls: pre-shared key count does not match identifier count")
 
-// errNotCommit is reported when a transcript hash is computed over
+// ErrNotCommit is reported when a transcript hash is computed over
 // content that is not a commit.
-var errNotCommit = errors.New("mls: content is not a commit")
+var ErrNotCommit = errors.New("mls: content is not a commit")
 
-// errConsumed is reported for a secret that the deletion schedule of
+// ErrConsumed is reported for a secret that the deletion schedule of
 // RFC 9420, Section 9.2 has already discarded.
-var errConsumed = errors.New("mls: secret has already been consumed")
+var ErrConsumed = errors.New("mls: secret has already been consumed")
 
-// errLeafRange is reported for a leaf index outside the group.
-var errLeafRange = errors.New("mls: leaf index out of range")
+// ErrLeafRange is reported for a leaf index outside the group.
+var ErrLeafRange = errors.New("mls: leaf index out of range")
 
 // ErrApplicationNotEncrypted is reported when application data is
 // framed as a PublicMessage. RFC 9420, Section 6.2 requires that
@@ -99,14 +99,25 @@ var ErrUnknownProposal = errors.New("mls: unknown proposal")
 // ErrRemoved is reported when a commit removes the member applying it.
 var ErrRemoved = errors.New("mls: member was removed from the group")
 
-var (
-	errNotProposal         = errors.New("mls: content is not a proposal")
-	errNotForGroup         = errors.New("mls: message is not for this group and epoch")
-	errOwnCommit           = errors.New("mls: cannot apply one's own commit")
-	errUnsupportedProposal = errors.New("mls: unsupported proposal type")
-)
+// ErrNotProposal is reported for content that must be a proposal and
+// is not.
+var ErrNotProposal = errors.New("mls: content is not a proposal")
+
+// ErrNotForGroup is reported for a message addressed to another group
+// or to another epoch of this one.
+var ErrNotForGroup = errors.New("mls: message is not for this group and epoch")
+
+// ErrOwnCommit is reported when a member applies a commit it sent
+// itself, which it cannot: [Group.Commit] already returned the state
+// that commit begins.
+var ErrOwnCommit = errors.New("mls: cannot apply one's own commit")
+
+// ErrUnsupportedProposal is reported for a proposal type this package
+// does not implement, which is external_init and reinit.
+var ErrUnsupportedProposal = errors.New("mls: unsupported proposal type")
 
 // ErrDuplicateExtension is reported for a list of extensions holding
 // more than one extension of the same type, which RFC 9420,
 // Section 13.4 forbids.
 var ErrDuplicateExtension = errors.New("mls: duplicate extension")
+

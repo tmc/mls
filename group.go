@@ -95,7 +95,7 @@ func (c *Client) Join(w *Welcome, tree RatchetTree) (*Group, error) {
 	signer := LeafIndex(info.Signer)
 	leaf := tree.Leaf(signer)
 	if leaf == nil {
-		return nil, errLeafRange
+		return nil, ErrLeafRange
 	}
 	if err := info.Verify(leaf.SignatureKey); err != nil {
 		return nil, err
@@ -212,13 +212,13 @@ func (g *Group) Unprotect(m *MLSMessage) (*AuthenticatedContent, error) {
 	case m.PrivateMessage != nil:
 		c, err = m.PrivateMessage.AuthenticatedContent(cs, g.keys, g.Schedule.SenderDataSecret)
 	default:
-		return nil, errNotForGroup
+		return nil, ErrNotForGroup
 	}
 	if err != nil {
 		return nil, err
 	}
 	if c.Content.Epoch != g.Context.Epoch || !bytes.Equal(c.Content.GroupID, g.Context.GroupID) {
-		return nil, errNotForGroup
+		return nil, ErrNotForGroup
 	}
 	if c.Content.Sender.Type != SenderTypeMember {
 		return nil, ErrNotMember
@@ -277,14 +277,14 @@ func (g *Group) Handle(m *MLSMessage) (*Group, error) {
 	case ContentTypeCommit:
 		return g.ApplyCommit(c)
 	}
-	return nil, errNotCommit
+	return nil, ErrNotCommit
 }
 
 // AddProposal remembers a proposal so that a later commit can refer
 // to it by reference.
 func (g *Group) AddProposal(c *AuthenticatedContent) error {
 	if c.Content.ContentType != ContentTypeProposal {
-		return errNotProposal
+		return ErrNotProposal
 	}
 	ref, err := c.Ref(g.CipherSuite)
 	if err != nil {
@@ -326,7 +326,7 @@ func (g *Group) resolve(commit *Commit) ([]proposal, error) {
 func (g *Group) ApplyCommit(c *AuthenticatedContent) (*Group, error) {
 	cs := g.CipherSuite
 	if c.Content.ContentType != ContentTypeCommit {
-		return nil, errNotCommit
+		return nil, ErrNotCommit
 	}
 	commit := c.Content.Commit
 	sender := LeafIndex(c.Content.Sender.LeafIndex)
@@ -369,7 +369,7 @@ func (g *Group) ApplyCommit(c *AuthenticatedContent) (*Group, error) {
 	commitSecret := make([]byte, cs.HashSize())
 	if commit.Path != nil {
 		if sender == g.Index {
-			return nil, errOwnCommit
+			return nil, ErrOwnCommit
 		}
 		if err := next.Tree.MergeUpdatePath(cs, sender, commit.Path); err != nil {
 			return nil, err
@@ -437,7 +437,7 @@ func (g *Group) apply(proposals []proposal) (added []LeafIndex, psks []PreShared
 	for _, p := range proposals {
 		if p.Type == ProposalTypeRemove {
 			if g.Tree.Leaf(LeafIndex(p.Remove.Removed)) == nil {
-				return nil, nil, errLeafRange
+				return nil, nil, ErrLeafRange
 			}
 			g.Tree.Remove(LeafIndex(p.Remove.Removed))
 		}
@@ -450,7 +450,7 @@ func (g *Group) apply(proposals []proposal) (added []LeafIndex, psks []PreShared
 		case ProposalTypePreSharedKey:
 			psks = append(psks, p.PreSharedKey.PSK)
 		case ProposalTypeExternalInit, ProposalTypeReInit:
-			return nil, nil, errUnsupportedProposal
+			return nil, nil, ErrUnsupportedProposal
 		}
 	}
 	return added, psks, nil

@@ -42,12 +42,12 @@ func (t *SecretTree) secret(x NodeIndex) ([]byte, error) {
 	if s, ok := t.secrets[x]; ok {
 		delete(t.secrets, x)
 		if s == nil {
-			return nil, errConsumed
+			return nil, ErrConsumed
 		}
 		return s, nil
 	}
 	if x == root(t.n) {
-		return nil, errConsumed
+		return nil, ErrConsumed
 	}
 	p, err := t.secret(x.parent())
 	if err != nil {
@@ -90,7 +90,7 @@ func (t *SecretTree) Ratchet(leaf LeafIndex, typ ContentType) (*Ratchet, error) 
 		return nil, errUnknown("content type", uint64(typ))
 	}
 	if leaf >= t.n {
-		return nil, errLeafRange
+		return nil, ErrLeafRange
 	}
 	s, err := t.secret(leaf.NodeIndex())
 	if err != nil {
@@ -144,7 +144,7 @@ func (r *Ratchet) Next() (key, nonce []byte, err error) {
 // as they are consumed.
 func (r *Ratchet) Key(generation uint32) (key, nonce []byte, err error) {
 	if generation < r.generation {
-		return nil, nil, errConsumed
+		return nil, nil, ErrConsumed
 	}
 	for {
 		key, nonce, err := r.Next()

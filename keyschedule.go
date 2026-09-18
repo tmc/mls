@@ -140,7 +140,7 @@ func (ks *KeySchedule) Export(label string, context []byte, length uint16) ([]by
 // See RFC 9420, Section 8.4.
 func (cs CipherSuite) PSKSecret(ids []PreSharedKeyID, psks [][]byte) ([]byte, error) {
 	if len(ids) != len(psks) {
-		return nil, errPSKCount
+		return nil, ErrPSKCount
 	}
 	zero := make([]byte, cs.HashSize())
 	secret := zero

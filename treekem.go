@@ -45,7 +45,7 @@ func (s *TreeSecrets) PrivateKey(cs CipherSuite, x NodeIndex) ([]byte, error) {
 func (s *TreeSecrets) Consistent(cs CipherSuite, t RatchetTree) error {
 	leaf := t.Leaf(s.Index)
 	if leaf == nil {
-		return errLeafRange
+		return ErrLeafRange
 	}
 	if pub, err := cs.PublicKey(s.Leaf); err != nil {
 		return err
@@ -123,7 +123,7 @@ func (t RatchetTree) FilteredDirectPath(i LeafIndex) []NodeIndex {
 func (t *RatchetTree) CreateUpdatePath(cs CipherSuite, i LeafIndex, leafSecret, sigPriv []byte, ctx *GroupContext, exclude []LeafIndex) (*UpdatePath, *TreeSecrets, []byte, error) {
 	old := t.Leaf(i)
 	if old == nil {
-		return nil, nil, nil, errLeafRange
+		return nil, nil, nil, ErrLeafRange
 	}
 	leaf := *old
 	leafPriv, leafPub, err := cs.nodeKeyPair(leafSecret)
