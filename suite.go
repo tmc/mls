@@ -349,3 +349,85 @@ func padScalar(curve elliptic.Curve, priv []byte) []byte {
 	copy(b[n-len(priv):], priv)
 	return b
 }
+
+// DeriveKeyPair derives an HPKE key pair from the input keying
+// material ikm, as RFC 9180's DeriveKeyPair does. The ratchet tree
+// uses it to turn a node secret into the node's key pair.
+func (cs CipherSuite) DeriveKeyPair(ikm []byte) (priv []byte, pub HPKEPublicKey, err error) {
+	p, err := cs.params()
+	if err != nil {
+		return nil, nil, err
+	}
+	key, err := hpke.DHKEM(p.curve).DeriveKeyPair(ikm)
+	if err != nil {
+		return nil, nil, err
+	}
+	priv, err = key.Bytes()
+	if err != nil {
+		return nil, nil, err
+	}
+	return priv, key.PublicKey().Bytes(), nil
+}
+
+// GenerateKeyPair returns a fresh HPKE key pair, as used for a leaf
+// node's encryption key and for a key package's init key.
+func (cs CipherSuite) GenerateKeyPair() (priv []byte, pub HPKEPublicKey, err error) {
+	p, err := cs.params()
+	if err != nil {
+		return nil, nil, err
+	}
+	key, err := hpke.DHKEM(p.curve).GenerateKey()
+	if err != nil {
+		return nil, nil, err
+	}
+	priv, err = key.Bytes()
+	if err != nil {
+		return nil, nil, err
+	}
+	return priv, key.PublicKey().Bytes(), nil
+}
+
+// GenerateSignatureKeyPair returns a fresh signature key pair in the
+// form SignWithLabel and VerifyWithLabel expect.
+func (cs CipherSuite) GenerateSignatureKeyPair() (priv []byte, pub SignaturePublicKey, err error) {
+	p, err := cs.params()
+	if err != nil {
+		return nil, nil, err
+	}
+	switch p.sig {
+	case signatureEd25519:
+		pub, priv, err := ed25519.GenerateKey(rand.Reader)
+		if err != nil {
+			return nil, nil, err
+		}
+		return priv.Seed(), SignaturePublicKey(pub), nil
+	default:
+		key, err := ecdsa.GenerateKey(p.sigCurve, rand.Reader)
+		if err != nil {
+			return nil, nil, err
+		}
+		priv, err := key.Bytes()
+		if err != nil {
+			return nil, nil, err
+		}
+		pub, err := key.PublicKey.Bytes()
+		if err != nil {
+			return nil, nil, err
+		}
+		return priv, pub, nil
+	}
+}
+
+// PublicKey returns the HPKE public key matching the private key
+// priv.
+func (cs CipherSuite) PublicKey(priv []byte) (HPKEPublicKey, error) {
+	p, err := cs.params()
+	if err != nil {
+		return nil, err
+	}
+	key, err := hpke.DHKEM(p.curve).NewPrivateKey(priv)
+	if err != nil {
+		return nil, err
+	}
+	return key.PublicKey().Bytes(), nil
+}

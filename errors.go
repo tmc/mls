@@ -66,3 +66,12 @@ var ErrBadParentHash = errors.New("mls: parent node is not parent-hash valid")
 // ErrNotInWelcome is reported when a welcome message carries no
 // secrets for the key package it was offered to.
 var ErrNotInWelcome = errors.New("mls: welcome message has no secrets for this key package")
+
+// ErrBadTreeKEM is reported for an update path that does not match
+// the ratchet tree it is applied to: a wrong number of nodes, or a
+// public key that does not match the path secret encrypted under it.
+var ErrBadTreeKEM = errors.New("mls: malformed update path")
+
+// ErrNotInPath is reported when an update path carries no path
+// secret that the member can decrypt.
+var ErrNotInPath = errors.New("mls: no path secret for this member")

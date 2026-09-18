@@ -14,6 +14,10 @@ import (
 type hexBytes []byte
 
 func (h *hexBytes) UnmarshalJSON(data []byte) error {
+	if string(data) == "null" {
+		*h = nil
+		return nil
+	}
 	var s string
 	if err := json.Unmarshal(data, &s); err != nil {
 		return err
