@@ -110,6 +110,17 @@ func externalCommitOK(commit *Commit) error {
 // externalProposalsOK checks the proposals of a commit from a new
 // member: exactly one ExternalInit, nothing by reference, and nothing
 // but Remove and PreSharedKey besides.
+// externalProposalType reports whether a party outside the group may
+// send a proposal of this type. See RFC 9420, Section 12.1.8.
+func externalProposalType(t ProposalType) bool {
+	switch t {
+	case ProposalTypeAdd, ProposalTypeRemove, ProposalTypePreSharedKey,
+		ProposalTypeReInit, ProposalTypeGroupContextExtensions:
+		return true
+	}
+	return false
+}
+
 func externalProposalsOK(commit *Commit) error {
 	n := 0
 	for _, p := range commit.Proposals {

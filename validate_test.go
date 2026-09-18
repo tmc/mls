@@ -67,15 +67,15 @@ func TestCommitRejectsBadLeaf(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// A key package whose leaf reuses the committer's signature
+	// A key package whose leaf reuses the committer's encryption
 	// key cannot join: RFC 9420, Section 7.3 requires signature
 	// and encryption keys to be unique among the members.
 	kp := *bob.KeyPackage
-	kp.LeafNode.SignatureKey = alice.KeyPackage.LeafNode.SignatureKey
-	if err := kp.LeafNode.Sign(cs, alice.SignaturePriv, nil, 0); err != nil {
+	kp.LeafNode.EncryptionKey = alice.KeyPackage.LeafNode.EncryptionKey
+	if err := kp.LeafNode.Sign(cs, bob.SignaturePriv, nil, 0); err != nil {
 		t.Fatal(err)
 	}
-	if err := kp.Sign(alice.SignaturePriv); err != nil {
+	if err := kp.Sign(bob.SignaturePriv); err != nil {
 		t.Fatal(err)
 	}
 	add := &Proposal{Type: ProposalTypeAdd, Add: &Add{KeyPackage: kp}}

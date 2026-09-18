@@ -155,6 +155,10 @@ func (g *Group) Commit(extra []*Proposal) (*Group, *MLSMessage, *MLSMessage, err
 func (g *Group) commit(extra []*Proposal, sender SenderType) (*Group, *MLSMessage, *MLSMessage, error) {
 	cs := g.CipherSuite
 	commit := &Commit{}
+	from := Sender{Type: sender}
+	if sender == SenderTypeMember {
+		from.LeafIndex = uint32(g.Index)
+	}
 	proposals := make([]proposal, 0, len(g.proposals)+len(extra))
 	if sender == SenderTypeMember {
 		for _, ref := range slices.Sorted(maps.Keys(g.proposals)) {
@@ -164,7 +168,7 @@ func (g *Group) commit(extra []*Proposal, sender SenderType) (*Group, *MLSMessag
 				return nil, nil, nil, err
 			}
 			commit.Proposals = append(commit.Proposals, ProposalOrRef{Type: ProposalOrRefTypeReference, Reference: r})
-			proposals = append(proposals, proposal{c.Content.Proposal, LeafIndex(c.Content.Sender.LeafIndex)})
+			proposals = append(proposals, proposal{c.Content.Proposal, c.Content.Sender})
 		}
 	}
 	now := time.Now()
@@ -177,12 +181,14 @@ func (g *Group) commit(extra []*Proposal, sender SenderType) (*Group, *MLSMessag
 			}
 		}
 		commit.Proposals = append(commit.Proposals, ProposalOrRef{Type: ProposalOrRefTypeProposal, Proposal: p})
-		proposals = append(proposals, proposal{p, g.Index})
+		proposals = append(proposals, proposal{p, from})
 	}
 	if sender == SenderTypeNewMemberCommit {
 		if err := externalProposalsOK(commit); err != nil {
 			return nil, nil, nil, err
 		}
+	} else if err := g.Tree.validateProposals(proposals, g.Index, &g.Context); err != nil {
+		return nil, nil, nil, err
 	}
 
 	next := &Group{
@@ -233,10 +239,6 @@ func (g *Group) commit(extra []*Proposal, sender SenderType) (*Group, *MLSMessag
 
 	// Sign the commit, which the transcript hash then covers, and
 	// derive the new epoch's secrets from it.
-	from := Sender{Type: sender}
-	if sender == SenderTypeMember {
-		from.LeafIndex = uint32(g.Index)
-	}
 	c := &AuthenticatedContent{
 		WireFormat: WireFormatPublicMessage,
 		Content: FramedContent{

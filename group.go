@@ -307,27 +307,34 @@ func (g *Group) AddProposal(c *AuthenticatedContent) error {
 	return nil
 }
 
-// a proposal together with the leaf that sent it.
+// a proposal together with the sender that sent it. A proposal a
+// commit carries inline comes from the committer; one carried by
+// reference comes from whoever sent it in the epoch, which may be a
+// member or, under Section 12.1.8, a party outside the group.
 type proposal struct {
 	*Proposal
-	sender LeafIndex
+	from Sender
 }
+
+// leaf is the leaf the proposal's sender occupies. It is meaningful
+// only for a proposal from a member.
+func (p proposal) leaf() LeafIndex { return LeafIndex(p.from.LeafIndex) }
 
 // resolve turns the proposals a commit refers to into the proposals
 // themselves, in the order the commit lists them.
-func (g *Group) resolve(commit *Commit) ([]proposal, error) {
+func (g *Group) resolve(commit *Commit, committer Sender) ([]proposal, error) {
 	out := make([]proposal, 0, len(commit.Proposals))
 	for i := range commit.Proposals {
 		p := &commit.Proposals[i]
 		switch p.Type {
 		case ProposalOrRefTypeProposal:
-			out = append(out, proposal{p.Proposal, 0})
+			out = append(out, proposal{p.Proposal, committer})
 		case ProposalOrRefTypeReference:
 			c, ok := g.proposals[hex.EncodeToString(p.Reference)]
 			if !ok {
 				return nil, ErrUnknownProposal
 			}
-			out = append(out, proposal{c.Content.Proposal, LeafIndex(c.Content.Sender.LeafIndex)})
+			out = append(out, proposal{c.Content.Proposal, c.Content.Sender})
 		}
 	}
 	return out, nil
@@ -349,13 +356,13 @@ func (g *Group) ApplyCommit(c *AuthenticatedContent) (*Group, error) {
 		}
 	}
 	sender := LeafIndex(c.Content.Sender.LeafIndex)
-	proposals, err := g.resolve(commit)
+	proposals, err := g.resolve(commit, c.Content.Sender)
 	if err != nil {
 		return nil, err
 	}
-	for i := range proposals {
-		if proposals[i].sender == 0 && commit.Proposals[i].Type == ProposalOrRefTypeProposal {
-			proposals[i].sender = sender
+	if !external {
+		if err := g.Tree.validateProposals(proposals, sender, &g.Context); err != nil {
+			return nil, err
 		}
 	}
 
@@ -478,7 +485,7 @@ func (g *Group) apply(proposals []proposal) (*changes, error) {
 	for _, p := range proposals {
 		if p.Type == ProposalTypeUpdate {
 			leaf := p.Update.LeafNode
-			old := g.Tree.Leaf(p.sender)
+			old := g.Tree.Leaf(p.leaf())
 			if old == nil {
 				return nil, ErrLeafRange
 			}
@@ -487,10 +494,10 @@ func (g *Group) apply(proposals []proposal) (*changes, error) {
 			if bytes.Equal(old.EncryptionKey, leaf.EncryptionKey) {
 				return nil, ErrDuplicateLeafKey
 			}
-			if err := g.Tree.validateLeafInGroup(g.CipherSuite, &leaf, p.sender, &g.Context, LeafNodeSourceUpdate); err != nil {
+			if err := g.Tree.validateLeafInGroup(g.CipherSuite, &leaf, p.leaf(), &g.Context, LeafNodeSourceUpdate); err != nil {
 				return nil, err
 			}
-			g.Tree.Update(p.sender, &leaf)
+			g.Tree.Update(p.leaf(), &leaf)
 		}
 	}
 	for _, p := range proposals {

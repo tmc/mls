@@ -156,3 +156,15 @@ var ErrBadExternalCommit = errors.New("mls: malformed external commit")
 // ErrNoExternalPub is reported for a GroupInfo that an external join
 // cannot use because it has no external_pub extension.
 var ErrNoExternalPub = errors.New("mls: group info has no external_pub extension")
+
+// ErrProposalList is reported for a commit whose list of proposals
+// breaks one of the rules of RFC 9420, Section 12.2. The message says
+// which rule.
+var ErrProposalList = errors.New("mls: invalid proposal list")
+
+// ErrBadExternalSender is reported for a proposal from outside the
+// group that RFC 9420, Section 12.1.8 does not allow: one that names
+// no entry in the external_senders extension, that carries a proposal
+// type an external sender may not send, or that is encrypted, which a
+// non-member cannot do.
+var ErrBadExternalSender = errors.New("mls: malformed external proposal")
