@@ -21,6 +21,11 @@ if msg.WireFormat == mls.WireFormatKeyPackage {
 }
 ```
 
+## License
+
+MIT. See [LICENSE](LICENSE). The test vectors in `testdata` come from
+the MLS working group and carry their own license.
+
 ## State
 
 Complete for the five cipher suites the Go standard library can
@@ -62,6 +67,31 @@ pass: `messages`, `deserialization`, `tree-math`, `crypto-basics`,
 `passive-client-handling-commit`. Cases on suites 4 and 6 are skipped.
 The vector files are vendored in `testdata`; `go generate ./...`
 refreshes them.
+
+The wire format is fuzzed. `FuzzMLSMessage`, `FuzzKeyPackage`,
+`FuzzRatchetTree`, `FuzzWelcome`, `FuzzGroupInfo` and `FuzzProposal`
+seed their corpora from the working group's own encodings and check
+two properties: decoding must not panic, and anything that decodes
+must re-encode to the bytes it came from. The second is the one that
+matters for security, because a structure with two encodings lets an
+attacker change the bytes a signature covers without changing the
+value it is checked against.
+
+    go test -fuzz FuzzMLSMessage
+
+## Security
+
+This package has not been audited. It implements RFC 9420 and passes
+the working group's vectors, which is evidence about correctness, not
+about resistance to attack.
+
+Two properties it does not claim: secrets live in ordinary Go byte
+slices and are not zeroed when consumed, so RFC 9420 Section 9.2's
+deletion requirement is met logically but not in memory; and the
+package does not defend against traffic analysis beyond the padding
+parameter Group.Protect takes.
+
+Report a vulnerability by opening an issue.
 
 [RFC 9420]: https://www.rfc-editor.org/rfc/rfc9420.html
 [test vectors]: https://github.com/mlswg/mls-implementations
