@@ -1,7 +1,8 @@
 # mls
 
 Package mls implements the Messaging Layer Security protocol,
-[RFC 9420], with no dependencies outside the Go standard library.
+[RFC 9420], with no dependencies beyond the Go standard library and
+`golang.org/x/crypto`.
 
     go get github.com/tmc/mls
 
@@ -35,9 +36,10 @@ Not yet implemented: TreeKEM update paths, and the group state
 machine that ties these together.
 
 Five of the seven cipher suites are implemented. Suites 4 and 6 need
-X448 and Ed448, which the Go standard library does not provide. Suites
-3 and 6 use ChaCha20-Poly1305, which the standard library exposes only
-through HPKE, so they can do everything but encrypt messages.
+X448 and Ed448, which neither the standard library nor `x/crypto`
+provides. Suite 3 uses ChaCha20-Poly1305 for message protection, which
+the standard library exposes only through HPKE, so that one algorithm
+comes from `golang.org/x/crypto/chacha20poly1305`.
 
 ## Tests
 

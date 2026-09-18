@@ -18,6 +18,7 @@ import (
 	"hash"
 
 	"github.com/tmc/mls/tlssyntax"
+	"golang.org/x/crypto/chacha20poly1305"
 )
 
 // ErrUnsupportedCipherSuite is reported for cipher suites this
@@ -329,7 +330,7 @@ func (cs CipherSuite) AEAD(key []byte) (cipher.AEAD, error) {
 		return nil, err
 	}
 	if p.chacha {
-		return nil, fmt.Errorf("%w %d: ChaCha20-Poly1305 is not available outside HPKE", ErrUnsupportedCipherSuite, cs)
+		return chacha20poly1305.New(key)
 	}
 	block, err := aes.NewCipher(key)
 	if err != nil {
