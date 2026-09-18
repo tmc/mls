@@ -38,7 +38,10 @@
 // [Client.JoinExternal], which is the external commit of Section 8.3.
 // A party outside a group may propose to it as well, either as a
 // sender the group provisioned ([ExternalClient.Propose]) or by
-// asking to be added ([Client.ProposeAdd]). A group ends either by
+// asking to be added ([Client.ProposeAdd]). A member replaces its own
+// keys with [Group.ProposeUpdate], which keeps the new encryption key
+// so that the member can follow the commit that applies it. A group
+// ends either by
 // losing its members or by being reinitialized: see [Group.ReInit],
 // [Group.Reinitialize], [Group.Branch] and [Client.Resume].
 //

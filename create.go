@@ -1,6 +1,7 @@
 package mls
 
 import (
+	"bytes"
 	"crypto/rand"
 	"maps"
 	"slices"
@@ -85,6 +86,7 @@ func (c *Client) NewGroup(groupID []byte, extensions Extensions) (*Group, error)
 		Secrets:    NewTreeSecrets(0, c.EncryptionPriv),
 		client:     c,
 		proposals:  make(map[string]*AuthenticatedContent),
+		updates:    make(map[string][]byte),
 		resumption: make(map[uint64][]byte),
 	}
 	epochSecret := make([]byte, cs.HashSize())
@@ -138,6 +140,39 @@ func (g *Group) Propose(p *Proposal) (*MLSMessage, error) {
 	return &MLSMessage{Version: g.Context.Version, WireFormat: WireFormatPublicMessage, PublicMessage: pm}, nil
 }
 
+// ProposeUpdate proposes leaf as the sender's own new leaf node and
+// keeps encPriv, the private half of leaf.EncryptionKey, so that the
+// group can follow the commit that applies the proposal. A member
+// that proposes an update any other way cannot process that commit:
+// the committer encrypts the path secrets to the new key, and only
+// the proposer holds the matching private key.
+//
+// The leaf must have source update and must be signed over the group
+// ID and the member's own leaf index. Rotating the signature key and
+// the credential along with the encryption key is what recovers from
+// a compromised signature key.
+//
+// A commit must not carry its sender's own update, so a member with
+// an update outstanding drops it when it commits.
+func (g *Group) ProposeUpdate(leaf *LeafNode, encPriv []byte) (*MLSMessage, error) {
+	if leaf.Source != LeafNodeSourceUpdate {
+		return nil, ErrBadLeafNodeSource
+	}
+	pub, err := g.CipherSuite.PublicKey(encPriv)
+	if err != nil {
+		return nil, err
+	}
+	if !bytes.Equal(pub, leaf.EncryptionKey) {
+		return nil, ErrBadTreeKEM
+	}
+	m, err := g.Propose(&Proposal{Type: ProposalTypeUpdate, Update: &Update{LeafNode: *leaf}})
+	if err != nil {
+		return nil, err
+	}
+	g.updates[string(leaf.EncryptionKey)] = encPriv
+	return m, nil
+}
+
 // Commit ends the epoch. It applies every proposal g has seen in this
 // epoch, along with the extra proposals, which are carried in the
 // commit itself. It returns the group's state in the new epoch, the
@@ -169,6 +204,12 @@ func (g *Group) commit(extra []*Proposal, sender SenderType) (*Group, *MLSMessag
 	if sender == SenderTypeMember {
 		for _, ref := range slices.Sorted(maps.Keys(g.proposals)) {
 			c := g.proposals[ref]
+			// A commit must not carry its sender's own update:
+			// the sender's leaf is replaced by the update path
+			// instead. See RFC 9420, Section 12.2.
+			if c.Content.Proposal.Type == ProposalTypeUpdate && LeafIndex(c.Content.Sender.LeafIndex) == g.Index {
+				continue
+			}
 			r, err := c.Ref(cs)
 			if err != nil {
 				return nil, nil, nil, err
@@ -204,6 +245,7 @@ func (g *Group) commit(extra []*Proposal, sender SenderType) (*Group, *MLSMessag
 		Index:       g.Index,
 		client:      g.client,
 		proposals:   make(map[string]*AuthenticatedContent),
+		updates:     make(map[string][]byte),
 		resumption:  maps.Clone(g.resumption),
 		prior:       g.prior,
 		resumed:     g.resumed,

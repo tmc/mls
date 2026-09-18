@@ -70,6 +70,7 @@ func (c *Client) JoinExternal(info *GroupInfo, tree RatchetTree) (*Group, *MLSMe
 		client:      c,
 		interim:     interim,
 		proposals:   make(map[string]*AuthenticatedContent),
+		updates:     make(map[string][]byte),
 		resumption:  make(map[uint64][]byte),
 	}
 

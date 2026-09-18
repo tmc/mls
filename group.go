@@ -40,6 +40,7 @@ type Group struct {
 	interim    []byte // interim transcript hash
 	keys       *SecretTree
 	proposals  map[string]*AuthenticatedContent // by proposal reference
+	updates    map[string][]byte                // encryption keys of one's own updates, by public key
 	resumption map[uint64][]byte                // resumption PSKs, by epoch
 	prior      *Group                           // the group this one was resumed from
 	resumed    *PreSharedKeyID                  // the key that links it to prior
@@ -162,6 +163,7 @@ func (c *Client) join(w *Welcome, tree RatchetTree, old *Group) (*Group, error) 
 		interim:     interim,
 		keys:        NewSecretTree(cs, tree.Size(), schedule.EncryptionSecret),
 		proposals:   make(map[string]*AuthenticatedContent),
+		updates:     make(map[string][]byte),
 		resumption:  map[uint64][]byte{info.GroupContext.Epoch: schedule.ResumptionPSK},
 		prior:       old,
 	}
@@ -411,6 +413,7 @@ func (g *Group) ApplyCommit(c *AuthenticatedContent) (*Group, error) {
 		Index:       g.Index,
 		client:      g.client,
 		proposals:   make(map[string]*AuthenticatedContent),
+		updates:     make(map[string][]byte),
 		resumption:  maps.Clone(g.resumption),
 		prior:       g.prior,
 		resumed:     g.resumed,
@@ -434,6 +437,17 @@ func (g *Group) ApplyCommit(c *AuthenticatedContent) (*Group, error) {
 	}
 	if next.Tree.Leaf(g.Index) == nil {
 		return nil, ErrRemoved
+	}
+	// An update the member itself proposed leaves a leaf whose
+	// encryption key only the member holds the private half of,
+	// kept by ProposeUpdate. Seat it before the path secrets are
+	// decrypted, which is what the committer encrypted to it.
+	if key := next.Tree.Leaf(g.Index).EncryptionKey; !bytes.Equal(key, g.Tree.Leaf(g.Index).EncryptionKey) {
+		priv, ok := g.updates[string(key)]
+		if !ok {
+			return nil, ErrBadTreeKEM
+		}
+		next.Secrets = NewTreeSecrets(g.Index, priv)
 	}
 
 	// The path secrets are encrypted under a provisional group
