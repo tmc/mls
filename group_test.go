@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-func newTestClient(t *testing.T, cs CipherSuite, name string) *Client {
+func newTestClient(t testing.TB, cs CipherSuite, name string) *Client {
 	t.Helper()
 	c, err := NewClient(cs, Credential{Type: CredentialTypeBasic, Identity: []byte(name)}, time.Hour)
 	if err != nil {
@@ -20,7 +20,7 @@ func newTestClient(t *testing.T, cs CipherSuite, name string) *Client {
 
 // send round-trips a message through its encoding, as the delivery
 // service would.
-func send(t *testing.T, m *MLSMessage) *MLSMessage {
+func send(t testing.TB, m *MLSMessage) *MLSMessage {
 	t.Helper()
 	b, err := Marshal(m)
 	if err != nil {
