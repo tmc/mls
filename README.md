@@ -91,6 +91,15 @@ deletion requirement is met logically but not in memory; and the
 package does not defend against traffic analysis, since Group.Protect
 seals a message at its natural length and exposes no padding.
 
+Every operation that touches a private key runs under
+crypto/subtle.WithDataIndependentTiming, which on an arm64 CPU with
+FEAT_DIT removes the operand dependence of instructions whose latency
+would otherwise vary. That is a floor, not a guarantee: it does not
+make variable-time code constant time, and it does not hide the
+cache-timing signal of the table-driven AES the standard library
+falls back to on a CPU without AES instructions. On such a CPU prefer
+a ChaCha20-Poly1305 cipher suite.
+
 Report a vulnerability by opening an issue.
 
 [RFC 9420]: https://www.rfc-editor.org/rfc/rfc9420.html

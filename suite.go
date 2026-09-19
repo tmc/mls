@@ -13,6 +13,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/sha512"
+	"crypto/subtle"
 	"errors"
 	"fmt"
 	"hash"
@@ -199,15 +200,26 @@ func (cs CipherSuite) SignWithLabel(priv []byte, label string, content []byte) (
 		if len(priv) != ed25519.SeedSize {
 			return nil, errors.New("mls: bad Ed25519 private key size")
 		}
-		return ed25519.Sign(ed25519.NewKeyFromSeed(priv), msg), nil
+		var sig []byte
+		withDIT(func() error {
+			sig = ed25519.Sign(ed25519.NewKeyFromSeed(priv), msg)
+			return nil
+		})
+		return sig, nil
 	default:
-		key, err := ecdsa.ParseRawPrivateKey(p.sigCurve, padScalar(p.sigCurve, priv))
-		if err != nil {
-			return nil, err
-		}
 		h := p.newHash()
 		h.Write(msg)
-		return ecdsa.SignASN1(rand.Reader, key, h.Sum(nil))
+		digest := h.Sum(nil)
+		var sig []byte
+		err := withDIT(func() error {
+			key, err := ecdsa.ParseRawPrivateKey(p.sigCurve, padScalar(p.sigCurve, priv))
+			if err != nil {
+				return err
+			}
+			sig, err = ecdsa.SignASN1(rand.Reader, key, digest)
+			return err
+		})
+		return sig, err
 	}
 }
 
@@ -270,11 +282,17 @@ func (cs CipherSuite) EncryptWithLabel(pub HPKEPublicKey, label string, context,
 	if err != nil {
 		return nil, err
 	}
-	enc, sender, err := hpke.NewSender(key, p.kdf(), p.aead(), info)
-	if err != nil {
-		return nil, err
-	}
-	ct, err := sender.Seal(nil, plaintext)
+	var enc, ct []byte
+	err = withDIT(func() error {
+		var sender *hpke.Sender
+		var err error
+		enc, sender, err = hpke.NewSender(key, p.kdf(), p.aead(), info)
+		if err != nil {
+			return err
+		}
+		ct, err = sender.Seal(nil, plaintext)
+		return err
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -291,15 +309,20 @@ func (cs CipherSuite) DecryptWithLabel(priv []byte, label string, context []byte
 	if err != nil {
 		return nil, err
 	}
-	key, err := hpke.DHKEM(p.curve).NewPrivateKey(pad(priv, p.kemSize))
-	if err != nil {
-		return nil, err
-	}
-	r, err := hpke.NewRecipient(ct.KEMOutput, key, p.kdf(), p.aead(), info)
-	if err != nil {
-		return nil, err
-	}
-	return r.Open(nil, ct.Ciphertext)
+	var pt []byte
+	err = withDIT(func() error {
+		key, err := hpke.DHKEM(p.curve).NewPrivateKey(pad(priv, p.kemSize))
+		if err != nil {
+			return err
+		}
+		r, err := hpke.NewRecipient(ct.KEMOutput, key, p.kdf(), p.aead(), info)
+		if err != nil {
+			return err
+		}
+		pt, err = r.Open(nil, ct.Ciphertext)
+		return err
+	})
+	return pt, err
 }
 
 // AEADKeySize and AEADNonceSize return the key and nonce sizes of the
@@ -332,13 +355,59 @@ func (cs CipherSuite) AEAD(key []byte) (cipher.AEAD, error) {
 		return nil, err
 	}
 	if p.chacha {
-		return chacha20poly1305.New(key)
+		aead, err := chacha20poly1305.New(key)
+		if err != nil {
+			return nil, err
+		}
+		return dataIndependent{aead}, nil
 	}
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		return nil, err
 	}
-	return cipher.NewGCM(block)
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, err
+	}
+	return dataIndependent{gcm}, nil
+}
+
+// withDIT runs f with the CPU's data-independent timing mode enabled,
+// so that a private-key operation reads as a single statement.
+// See dataIndependent for what the mode does and does not buy.
+func withDIT(f func() error) error {
+	var err error
+	subtle.WithDataIndependentTiming(func() { err = f() })
+	return err
+}
+
+// dataIndependent wraps an AEAD so that Seal and Open run with the
+// CPU's data-independent timing mode enabled, on the CPUs that have
+// one. The mode removes the operand dependence of instructions whose
+// latency would otherwise vary, which is what the constant-time code
+// underneath — GHASH, the field arithmetic, the tag comparison —
+// already assumes. It is a floor, not a fix: it does not make
+// variable-time code constant time, and in particular it does not
+// hide the cache-timing signal of the table-driven AES the standard
+// library falls back to on a CPU without AES instructions. Choose a
+// cipher suite the CPU implements. See crypto/subtle.
+type dataIndependent struct{ cipher.AEAD }
+
+func (d dataIndependent) Seal(dst, nonce, plaintext, additionalData []byte) []byte {
+	var out []byte
+	subtle.WithDataIndependentTiming(func() {
+		out = d.AEAD.Seal(dst, nonce, plaintext, additionalData)
+	})
+	return out
+}
+
+func (d dataIndependent) Open(dst, nonce, ciphertext, additionalData []byte) ([]byte, error) {
+	var out []byte
+	var err error
+	subtle.WithDataIndependentTiming(func() {
+		out, err = d.AEAD.Open(dst, nonce, ciphertext, additionalData)
+	})
+	return out, err
 }
 
 // pad left-pads b with zeros to n bytes. Test vectors and other
@@ -374,15 +443,19 @@ func (cs CipherSuite) DeriveKeyPair(ikm []byte) (priv []byte, pub HPKEPublicKey,
 	if err != nil {
 		return nil, nil, err
 	}
-	key, err := hpke.DHKEM(p.curve).DeriveKeyPair(ikm)
+	err = withDIT(func() error {
+		key, err := hpke.DHKEM(p.curve).DeriveKeyPair(ikm)
+		if err != nil {
+			return err
+		}
+		pub = key.PublicKey().Bytes()
+		priv, err = key.Bytes()
+		return err
+	})
 	if err != nil {
 		return nil, nil, err
 	}
-	priv, err = key.Bytes()
-	if err != nil {
-		return nil, nil, err
-	}
-	return priv, key.PublicKey().Bytes(), nil
+	return priv, pub, nil
 }
 
 // GenerateKeyPair returns a fresh HPKE key pair, as used for a leaf
@@ -392,15 +465,19 @@ func (cs CipherSuite) GenerateKeyPair() (priv []byte, pub HPKEPublicKey, err err
 	if err != nil {
 		return nil, nil, err
 	}
-	key, err := hpke.DHKEM(p.curve).GenerateKey()
+	err = withDIT(func() error {
+		key, err := hpke.DHKEM(p.curve).GenerateKey()
+		if err != nil {
+			return err
+		}
+		pub = key.PublicKey().Bytes()
+		priv, err = key.Bytes()
+		return err
+	})
 	if err != nil {
 		return nil, nil, err
 	}
-	priv, err = key.Bytes()
-	if err != nil {
-		return nil, nil, err
-	}
-	return priv, key.PublicKey().Bytes(), nil
+	return priv, pub, nil
 }
 
 // GenerateSignatureKeyPair returns a fresh signature key pair in the
@@ -441,11 +518,19 @@ func (cs CipherSuite) PublicKey(priv []byte) (HPKEPublicKey, error) {
 	if err != nil {
 		return nil, err
 	}
-	key, err := hpke.DHKEM(p.curve).NewPrivateKey(pad(priv, p.kemSize))
+	var pub HPKEPublicKey
+	err = withDIT(func() error {
+		key, err := hpke.DHKEM(p.curve).NewPrivateKey(pad(priv, p.kemSize))
+		if err != nil {
+			return err
+		}
+		pub = key.PublicKey().Bytes()
+		return nil
+	})
 	if err != nil {
 		return nil, err
 	}
-	return key.PublicKey().Bytes(), nil
+	return pub, nil
 }
 
 // ExternalInit generates the init secret for an epoch begun by an
@@ -461,11 +546,17 @@ func (cs CipherSuite) ExternalInit(externalPub HPKEPublicKey) (kemOutput, initSe
 	if err != nil {
 		return nil, nil, err
 	}
-	enc, sender, err := hpke.NewSender(key, p.kdf(), p.aead(), nil)
-	if err != nil {
-		return nil, nil, err
-	}
-	secret, err := sender.Export(externalInitLabel, cs.HashSize())
+	var enc, secret []byte
+	err = withDIT(func() error {
+		var sender *hpke.Sender
+		var err error
+		enc, sender, err = hpke.NewSender(key, p.kdf(), p.aead(), nil)
+		if err != nil {
+			return err
+		}
+		secret, err = sender.Export(externalInitLabel, cs.HashSize())
+		return err
+	})
 	if err != nil {
 		return nil, nil, err
 	}
