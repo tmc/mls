@@ -18,7 +18,7 @@ import (
 // A GroupInfo is specific to an epoch, and the join ends that epoch,
 // so each GroupInfo is good for one external join.
 // See RFC 9420, Section 12.4.3.2.
-func (c *Client) JoinExternal(info *GroupInfo, tree RatchetTree) (*Group, *MLSMessage, error) {
+func (c *Client) JoinExternal(info *GroupInfo, tree RatchetTree) (*Group, *Message, error) {
 	cs := c.CipherSuite
 	if info.GroupContext.CipherSuite != cs {
 		return nil, nil, ErrUnsupportedCipherSuite
@@ -152,7 +152,7 @@ func externalProposalsOK(commit *Commit) error {
 // let join. Each one is good for a single external join, since the
 // join ends the epoch it describes.
 // See RFC 9420, Section 12.4.3.2.
-func (g *Group) GroupInfo() (*MLSMessage, error) {
+func (g *Group) GroupInfo() (*Message, error) {
 	cs := g.CipherSuite
 	tag, err := cs.ConfirmationTag(g.Schedule.ConfirmationKey, g.Context.ConfirmedTranscriptHash)
 	if err != nil {
@@ -176,7 +176,7 @@ func (g *Group) GroupInfo() (*MLSMessage, error) {
 	if err := info.Sign(g.client.SignaturePriv); err != nil {
 		return nil, err
 	}
-	return &MLSMessage{Version: g.Context.Version, WireFormat: WireFormatGroupInfo, GroupInfo: info}, nil
+	return &Message{Version: g.Context.Version, WireFormat: WireFormatGroupInfo, GroupInfo: info}, nil
 }
 
 // externalSender returns the entry at index in the group's
@@ -211,7 +211,7 @@ type ExternalClient struct {
 // given epoch. Only the proposal types RFC 9420, Section 12.1.8
 // admits may be sent this way: Add, Remove, PreSharedKey, ReInit and
 // GroupContextExtensions.
-func (c *ExternalClient) Propose(groupID []byte, epoch uint64, p *Proposal) (*MLSMessage, error) {
+func (c *ExternalClient) Propose(groupID []byte, epoch uint64, p *Proposal) (*Message, error) {
 	if !externalProposalType(p.Type) {
 		return nil, ErrBadExternalSender
 	}
@@ -226,7 +226,7 @@ func (c *ExternalClient) Propose(groupID []byte, epoch uint64, p *Proposal) (*ML
 // a member. The group's members decide whether to commit it; RFC
 // 9420, Section 12.1.8 leaves that decision to the application, since
 // the proposal authenticates only the key package it carries.
-func (c *Client) ProposeAdd(groupID []byte, epoch uint64) (*MLSMessage, error) {
+func (c *Client) ProposeAdd(groupID []byte, epoch uint64) (*Message, error) {
 	p := &Proposal{Type: ProposalTypeAdd, Add: &Add{KeyPackage: *c.KeyPackage}}
 	return proposeExternal(c.CipherSuite, c.SignaturePriv, Sender{
 		Type: SenderTypeNewMemberProposal,
@@ -237,7 +237,7 @@ func (c *Client) ProposeAdd(groupID []byte, epoch uint64) (*MLSMessage, error) {
 // proposal is not covered by the group context, which its sender does
 // not have, and must be sent as a public message, which its sender
 // has no keys to encrypt. See RFC 9420, Sections 6.1 and 12.1.8.
-func proposeExternal(cs CipherSuite, priv []byte, from Sender, groupID []byte, epoch uint64, p *Proposal) (*MLSMessage, error) {
+func proposeExternal(cs CipherSuite, priv []byte, from Sender, groupID []byte, epoch uint64, p *Proposal) (*Message, error) {
 	c := &AuthenticatedContent{
 		WireFormat: WireFormatPublicMessage,
 		Content: FramedContent{
@@ -256,5 +256,5 @@ func proposeExternal(cs CipherSuite, priv []byte, from Sender, groupID []byte, e
 	if err != nil {
 		return nil, err
 	}
-	return &MLSMessage{Version: Version10, WireFormat: WireFormatPublicMessage, PublicMessage: pm}, nil
+	return &Message{Version: Version10, WireFormat: WireFormatPublicMessage, PublicMessage: pm}, nil
 }

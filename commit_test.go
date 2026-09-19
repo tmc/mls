@@ -65,7 +65,7 @@ func threeMember(t *testing.T) (a, b, c *Group) {
 // Section 12.4 would send: one that carries no update path, and so a
 // commit secret of all zeros. Group.Commit never builds one, so it
 // has to be assembled here.
-func pathlessCommit(t *testing.T, g *Group, ps []*Proposal) *MLSMessage {
+func pathlessCommit(t *testing.T, g *Group, ps []*Proposal) *Message {
 	t.Helper()
 	cs := g.CipherSuite
 	commit := &Commit{}
@@ -126,7 +126,7 @@ func pathlessCommit(t *testing.T, g *Group, ps []*Proposal) *MLSMessage {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &MLSMessage{Version: g.Context.Version, WireFormat: WireFormatPublicMessage, PublicMessage: pm}
+	return &Message{Version: g.Context.Version, WireFormat: WireFormatPublicMessage, PublicMessage: pm}
 }
 
 // A commit with no update path must be rejected where the RFC

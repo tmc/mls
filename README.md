@@ -12,7 +12,7 @@ optional values, and vectors with variable-size length headers. The
 with the cryptography that protects them.
 
 ```go
-var msg mls.MLSMessage
+var msg mls.Message
 if err := mls.Unmarshal(data, &msg); err != nil {
 	return err
 }
@@ -68,7 +68,7 @@ pass: `messages`, `deserialization`, `tree-math`, `crypto-basics`,
 The vector files are vendored in `testdata`; `go generate ./...`
 refreshes them.
 
-The wire format is fuzzed. `FuzzMLSMessage`, `FuzzKeyPackage`,
+The wire format is fuzzed. `FuzzMessage`, `FuzzKeyPackage`,
 `FuzzRatchetTree`, `FuzzWelcome`, `FuzzGroupInfo` and `FuzzProposal`
 seed their corpora from the working group's own encodings and check
 two properties: decoding must not panic, and anything that decodes
@@ -77,7 +77,7 @@ matters for security, because a structure with two encodings lets an
 attacker change the bytes a signature covers without changing the
 value it is checked against.
 
-    go test -fuzz FuzzMLSMessage
+    go test -fuzz FuzzMessage
 
 ## Security
 

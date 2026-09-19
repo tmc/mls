@@ -25,9 +25,9 @@ type message interface {
 // with random values, and an implementation passes by decoding it and
 // re-encoding it to the same bytes.
 var messageFields = map[string]func() message{
-	"mls_welcome":                       func() message { return new(MLSMessage) },
-	"mls_group_info":                    func() message { return new(MLSMessage) },
-	"mls_key_package":                   func() message { return new(MLSMessage) },
+	"mls_welcome":                       func() message { return new(Message) },
+	"mls_group_info":                    func() message { return new(Message) },
+	"mls_key_package":                   func() message { return new(Message) },
 	"ratchet_tree":                      func() message { return new(RatchetTree) },
 	"add_proposal":                      func() message { return new(Add) },
 	"update_proposal":                   func() message { return new(Update) },
@@ -38,10 +38,10 @@ var messageFields = map[string]func() message{
 	"external_init_proposal":            func() message { return new(ExternalInit) },
 	"group_secrets":                     func() message { return new(GroupSecrets) },
 	"commit":                            func() message { return new(Commit) },
-	"public_message_application":        func() message { return new(MLSMessage) },
-	"public_message_proposal":           func() message { return new(MLSMessage) },
-	"public_message_commit":             func() message { return new(MLSMessage) },
-	"private_message":                   func() message { return new(MLSMessage) },
+	"public_message_application":        func() message { return new(Message) },
+	"public_message_proposal":           func() message { return new(Message) },
+	"public_message_commit":             func() message { return new(Message) },
+	"private_message":                   func() message { return new(Message) },
 }
 
 // unsupportedFields are the fields of the "messages" test vector whose

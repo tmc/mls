@@ -56,12 +56,12 @@ func roundTrip(t *testing.T, data []byte, v interface {
 	}
 }
 
-func FuzzMLSMessage(f *testing.F) {
+func FuzzMessage(f *testing.F) {
 	seed(f, "mls_welcome", "mls_group_info", "mls_key_package",
 		"public_message_application", "public_message_proposal",
 		"public_message_commit", "private_message")
 	f.Fuzz(func(t *testing.T, data []byte) {
-		roundTrip(t, data, new(MLSMessage))
+		roundTrip(t, data, new(Message))
 	})
 }
 

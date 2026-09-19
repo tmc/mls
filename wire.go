@@ -45,7 +45,7 @@ func (c CipherSuite) String() string {
 	})
 }
 
-// A WireFormat identifies which message an [MLSMessage] carries.
+// A WireFormat identifies which message a [Message] carries.
 type WireFormat uint16
 
 // Wire formats. See RFC 9420, Section 17.5.

@@ -22,11 +22,11 @@ func TestParseHeader(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	keyPackage := &MLSMessage{Version: Version10, WireFormat: WireFormatKeyPackage, KeyPackage: bob.KeyPackage}
+	keyPackage := &Message{Version: Version10, WireFormat: WireFormatKeyPackage, KeyPackage: bob.KeyPackage}
 
 	for _, tc := range []struct {
 		name  string
-		msg   *MLSMessage
+		msg   *Message
 		epoch uint64
 		group []byte
 	}{
@@ -66,7 +66,7 @@ func TestParseHeader(t *testing.T) {
 	if h.WireFormat != 99 || h.GroupID != nil {
 		t.Errorf("unknown wire format: got %v, %q", h.WireFormat, h.GroupID)
 	}
-	if err := Unmarshal(unknown, new(MLSMessage)); err == nil {
+	if err := Unmarshal(unknown, new(Message)); err == nil {
 		t.Error("Unmarshal accepted an unknown wire format")
 	}
 

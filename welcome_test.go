@@ -28,7 +28,7 @@ func TestWelcomeVectors(t *testing.T) {
 			if _, err := cs.AEAD(make([]byte, cs.AEADKeySize())); err != nil {
 				t.Skipf("%v", err)
 			}
-			var kpm, wm MLSMessage
+			var kpm, wm Message
 			if err := Unmarshal(vec.KeyPackage, &kpm); err != nil {
 				t.Fatalf("Unmarshal key package: %v", err)
 			}

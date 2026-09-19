@@ -112,7 +112,7 @@ func (c *Client) NewGroup(groupID []byte, extensions Extensions) (*Group, error)
 // remembers it, so that a commit made in this epoch - by g or by
 // another member that receives the message - can refer to it by
 // reference.
-func (g *Group) Propose(p *Proposal) (*MLSMessage, error) {
+func (g *Group) Propose(p *Proposal) (*Message, error) {
 	if g.reinit != nil {
 		return nil, ErrReInitialized
 	}
@@ -137,7 +137,7 @@ func (g *Group) Propose(p *Proposal) (*MLSMessage, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &MLSMessage{Version: g.Context.Version, WireFormat: WireFormatPublicMessage, PublicMessage: pm}, nil
+	return &Message{Version: g.Context.Version, WireFormat: WireFormatPublicMessage, PublicMessage: pm}, nil
 }
 
 // ProposeUpdate proposes leaf as the sender's own new leaf node and
@@ -154,7 +154,7 @@ func (g *Group) Propose(p *Proposal) (*MLSMessage, error) {
 //
 // A commit must not carry its sender's own update, so a member with
 // an update outstanding drops it when it commits.
-func (g *Group) ProposeUpdate(leaf *LeafNode, encPriv []byte) (*MLSMessage, error) {
+func (g *Group) ProposeUpdate(leaf *LeafNode, encPriv []byte) (*Message, error) {
 	if leaf.Source != LeafNodeSourceUpdate {
 		return nil, ErrBadLeafNodeSource
 	}
@@ -182,7 +182,7 @@ func (g *Group) ProposeUpdate(leaf *LeafNode, encPriv []byte) (*MLSMessage, erro
 //
 // The commit always updates the committer's direct path, which RFC
 // 9420, Section 12.4 requires unless every proposal is an Add.
-func (g *Group) Commit(extra []*Proposal) (*Group, *MLSMessage, *MLSMessage, error) {
+func (g *Group) Commit(extra []*Proposal) (*Group, *Message, *Message, error) {
 	return g.commit(extra, SenderTypeMember)
 }
 
@@ -231,7 +231,7 @@ func (g *Group) staged(extra []*Proposal, from Sender) []*AuthenticatedContent {
 // proposals given, as a member or as a new member joining by external
 // commit. The two differ in who signs the commit and in how the new
 // epoch's init secret is reached, and not in anything below that.
-func (g *Group) commit(extra []*Proposal, sender SenderType) (*Group, *MLSMessage, *MLSMessage, error) {
+func (g *Group) commit(extra []*Proposal, sender SenderType) (*Group, *Message, *Message, error) {
 	if g.reinit != nil {
 		return nil, nil, nil, ErrReInitialized
 	}
@@ -365,7 +365,7 @@ func (g *Group) commit(extra []*Proposal, sender SenderType) (*Group, *MLSMessag
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	msg := &MLSMessage{Version: g.Context.Version, WireFormat: WireFormatPublicMessage, PublicMessage: pm}
+	msg := &Message{Version: g.Context.Version, WireFormat: WireFormatPublicMessage, PublicMessage: pm}
 
 	welcome, err := next.welcome(c.Auth.ConfirmationTag, proposals, ch.added, ch.psks)
 	if err != nil {
@@ -377,7 +377,7 @@ func (g *Group) commit(extra []*Proposal, sender SenderType) (*Group, *MLSMessag
 // welcome builds the welcome message for the members a commit added.
 // It returns nil if the commit added none. The group info carries the
 // ratchet tree, so that a joiner needs nothing but the welcome.
-func (g *Group) welcome(confirmationTag []byte, proposals []proposal, added []LeafIndex, psks []PreSharedKeyID) (*MLSMessage, error) {
+func (g *Group) welcome(confirmationTag []byte, proposals []proposal, added []LeafIndex, psks []PreSharedKeyID) (*Message, error) {
 	if len(added) == 0 {
 		return nil, nil
 	}
@@ -428,5 +428,5 @@ func (g *Group) welcome(confirmationTag []byte, proposals []proposal, added []Le
 			return nil, err
 		}
 	}
-	return &MLSMessage{Version: g.Context.Version, WireFormat: WireFormatWelcome, Welcome: w}, nil
+	return &Message{Version: g.Context.Version, WireFormat: WireFormatWelcome, Welcome: w}, nil
 }

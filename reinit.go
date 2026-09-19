@@ -41,7 +41,7 @@ func (g *Group) ReInit() *ReInit { return g.reinit }
 //
 // Any member of g may do this, not only the one that committed the
 // ReInit, so that a group is not stranded by whoever went offline.
-func (g *Group) Reinitialize(members []*KeyPackage) (*Group, *MLSMessage, error) {
+func (g *Group) Reinitialize(members []*KeyPackage) (*Group, *Message, error) {
 	if g.reinit == nil {
 		return nil, nil, ErrNotReInitialized
 	}
@@ -58,13 +58,13 @@ func (g *Group) Reinitialize(members []*KeyPackage) (*Group, *MLSMessage, error)
 // caller fetches afresh; g's own member is the creator and needs
 // none. It returns the new group at epoch 1 and the welcome message
 // for the others.
-func (g *Group) Branch(members []*KeyPackage) (*Group, *MLSMessage, error) {
+func (g *Group) Branch(members []*KeyPackage) (*Group, *Message, error) {
 	return g.resume(g.Context.GroupID, g.CipherSuite, g.Context.Extensions, ResumptionPSKUsageBranch, members)
 }
 
 // resume creates a new group linked to g by a resumption pre-shared
 // key, which is how both reinitialization and branching work.
-func (g *Group) resume(groupID []byte, cs CipherSuite, extensions Extensions, usage ResumptionPSKUsage, members []*KeyPackage) (*Group, *MLSMessage, error) {
+func (g *Group) resume(groupID []byte, cs CipherSuite, extensions Extensions, usage ResumptionPSKUsage, members []*KeyPackage) (*Group, *Message, error) {
 	c := g.client
 	if cs != c.CipherSuite {
 		return nil, nil, ErrUnsupportedCipherSuite

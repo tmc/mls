@@ -134,7 +134,7 @@ func TestMessageProtectionVectors(t *testing.T) {
 					want := vec.content(t, tt.typ, tt.raw)
 
 					if tt.pub != nil {
-						var m MLSMessage
+						var m Message
 						if err := Unmarshal(tt.pub, &m); err != nil {
 							t.Fatalf("Unmarshal public message: %v", err)
 						}
@@ -175,7 +175,7 @@ func TestMessageProtectionVectors(t *testing.T) {
 						}
 					}
 
-					var m MLSMessage
+					var m Message
 					if err := Unmarshal(tt.priv, &m); err != nil {
 						t.Fatalf("Unmarshal private message: %v", err)
 					}

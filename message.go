@@ -2,11 +2,11 @@ package mls
 
 import "github.com/tmc/mls/tlssyntax"
 
-// An MLSMessage is the outermost structure of the protocol: everything
+// A Message is the outermost structure of the protocol: everything
 // sent between clients and the delivery service is one of these.
 // WireFormat decides which of the remaining fields is present.
 // See RFC 9420, Section 6.
-type MLSMessage struct {
+type Message struct {
 	Version    ProtocolVersion
 	WireFormat WireFormat
 
@@ -17,7 +17,7 @@ type MLSMessage struct {
 	KeyPackage     *KeyPackage     // WireFormat == WireFormatKeyPackage
 }
 
-func (m *MLSMessage) MarshalTLS(w *tlssyntax.Writer) {
+func (m *Message) MarshalTLS(w *tlssyntax.Writer) {
 	w.WriteUint16(uint16(m.Version))
 	w.WriteUint16(uint16(m.WireFormat))
 	switch {
@@ -36,8 +36,8 @@ func (m *MLSMessage) MarshalTLS(w *tlssyntax.Writer) {
 	}
 }
 
-func (m *MLSMessage) UnmarshalTLS(r *tlssyntax.Reader) {
-	*m = MLSMessage{}
+func (m *Message) UnmarshalTLS(r *tlssyntax.Reader) {
+	*m = Message{}
 	m.Version = ProtocolVersion(r.ReadUint16())
 	m.WireFormat = WireFormat(r.ReadUint16())
 	switch m.WireFormat {
@@ -169,7 +169,7 @@ type Header struct {
 	Epoch      uint64 // valid when GroupID is non-nil
 }
 
-// ParseHeader reads the routing header of an encoded [MLSMessage]
+// ParseHeader reads the routing header of an encoded [Message]
 // without decoding the message. It succeeds for wire formats this
 // package cannot decode, so that a relay can route and forward bytes
 // it must not mangle; it reports an error only if the header itself

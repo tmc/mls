@@ -224,7 +224,7 @@ func (c *Client) pskSecret(ids []PreSharedKeyID, g *Group) ([]byte, error) {
 
 // Unprotect recovers the authenticated content of a message sent to
 // the group, checking that it comes from a member of this epoch.
-func (g *Group) Unprotect(m *MLSMessage) (*AuthenticatedContent, error) {
+func (g *Group) Unprotect(m *Message) (*AuthenticatedContent, error) {
 	cs := g.CipherSuite
 	var (
 		c   *AuthenticatedContent
@@ -291,7 +291,7 @@ func (g *Group) Unprotect(m *MLSMessage) (*AuthenticatedContent, error) {
 }
 
 // Protect frames application data as a private message of this epoch.
-func (g *Group) Protect(authenticatedData, plaintext []byte) (*MLSMessage, error) {
+func (g *Group) Protect(authenticatedData, plaintext []byte) (*Message, error) {
 	cs := g.CipherSuite
 	c := &AuthenticatedContent{
 		WireFormat: WireFormatPrivateMessage,
@@ -316,14 +316,14 @@ func (g *Group) Protect(authenticatedData, plaintext []byte) (*MLSMessage, error
 	if err != nil {
 		return nil, err
 	}
-	return &MLSMessage{Version: g.Context.Version, WireFormat: WireFormatPrivateMessage, PrivateMessage: pm}, nil
+	return &Message{Version: g.Context.Version, WireFormat: WireFormatPrivateMessage, PrivateMessage: pm}, nil
 }
 
 // Handle processes a handshake message. A proposal is remembered
 // until a commit refers to it, and Handle returns g unchanged; a
 // commit ends the epoch, and Handle returns the group's state in the
 // next one.
-func (g *Group) Handle(m *MLSMessage) (*Group, error) {
+func (g *Group) Handle(m *Message) (*Group, error) {
 	c, err := g.Unprotect(m)
 	if err != nil {
 		return nil, err

@@ -77,7 +77,7 @@ func TestUnknownVariant(t *testing.T) {
 	}{
 		{"credential type", "0009" + "00", new(Credential)},
 		{"node type", "09", new(Node)},
-		{"wire format", "0001" + "0009", new(MLSMessage)},
+		{"wire format", "0001" + "0009", new(Message)},
 	}
 	for _, tt := range tests {
 		if err := Unmarshal(mustHex(t, tt.enc), tt.val); err == nil {

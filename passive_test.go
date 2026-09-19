@@ -63,7 +63,7 @@ func TestPassiveClientVectors(t *testing.T) {
 
 func testPassiveClient(t *testing.T, vec *passiveVector) {
 	cs := vec.CipherSuite
-	m := new(MLSMessage)
+	m := new(Message)
 	if err := Unmarshal(vec.KeyPackage, m); err != nil {
 		t.Fatalf("key_package: %v", err)
 	}
@@ -101,7 +101,7 @@ func testPassiveClient(t *testing.T, vec *passiveVector) {
 		},
 	}
 
-	welcome := new(MLSMessage)
+	welcome := new(Message)
 	if err := Unmarshal(vec.Welcome, welcome); err != nil {
 		t.Fatalf("welcome: %v", err)
 	}
@@ -124,7 +124,7 @@ func testPassiveClient(t *testing.T, vec *passiveVector) {
 
 	for i, epoch := range vec.Epochs {
 		for j, raw := range epoch.Proposals {
-			m := new(MLSMessage)
+			m := new(Message)
 			if err := Unmarshal(raw, m); err != nil {
 				t.Fatalf("epoch %d: proposal %d: %v", i, j, err)
 			}
@@ -132,7 +132,7 @@ func testPassiveClient(t *testing.T, vec *passiveVector) {
 				t.Fatalf("epoch %d: proposal %d: %v", i, j, err)
 			}
 		}
-		m := new(MLSMessage)
+		m := new(Message)
 		if err := Unmarshal(epoch.Commit, m); err != nil {
 			t.Fatalf("epoch %d: commit: %v", i, err)
 		}

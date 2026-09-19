@@ -20,13 +20,13 @@ func newTestClient(t testing.TB, cs CipherSuite, name string) *Client {
 
 // send round-trips a message through its encoding, as the delivery
 // service would.
-func send(t testing.TB, m *MLSMessage) *MLSMessage {
+func send(t testing.TB, m *Message) *Message {
 	t.Helper()
 	b, err := Marshal(m)
 	if err != nil {
 		t.Fatal(err)
 	}
-	var got MLSMessage
+	var got Message
 	if err := Unmarshal(b, &got); err != nil {
 		t.Fatal(err)
 	}
