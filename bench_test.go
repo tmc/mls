@@ -166,8 +166,8 @@ func BenchmarkUnprotect(b *testing.B) {
 // maxGenerationJump is the cost a sender can impose.
 func BenchmarkRatchetStep(b *testing.B) {
 	cs := X25519AES128GCMSHA256Ed25519
-	tr := NewSecretTree(cs, 2, make([]byte, cs.HashSize()))
-	r, err := tr.Ratchet(0, ContentTypeApplication)
+	tr := newSecretTree(cs, 2, make([]byte, cs.HashSize()))
+	r, err := tr.ratchet(0, ContentTypeApplication)
 	if err != nil {
 		b.Fatal(err)
 	}

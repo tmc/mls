@@ -179,8 +179,8 @@ func TestMessageProtectionVectors(t *testing.T) {
 					if err := Unmarshal(tt.priv, &m); err != nil {
 						t.Fatalf("Unmarshal private message: %v", err)
 					}
-					tree := NewSecretTree(cs, protectionMembers, vec.EncryptionSecret)
-					got, err := m.PrivateMessage.AuthenticatedContent(cs, tree, vec.SenderDataSecret)
+					tree := newSecretTree(cs, protectionMembers, vec.EncryptionSecret)
+					got, err := m.PrivateMessage.authenticatedContent(cs, tree, vec.SenderDataSecret)
 					if err != nil {
 						t.Fatalf("unprotect private message: %v", err)
 					}
@@ -192,21 +192,21 @@ func TestMessageProtectionVectors(t *testing.T) {
 					}
 
 					// And our own encryption must decrypt.
-					send := NewSecretTree(cs, protectionMembers, vec.EncryptionSecret)
-					r, err := send.Ratchet(protectionSender, tt.typ)
+					send := newSecretTree(cs, protectionMembers, vec.EncryptionSecret)
+					r, err := send.ratchet(protectionSender, tt.typ)
 					if err != nil {
-						t.Fatalf("Ratchet: %v", err)
+						t.Fatalf("ratchet: %v", err)
 					}
 					want.WireFormat = WireFormatPrivateMessage
 					if err := want.Sign(cs, vec.SignaturePriv, ctx.Version, ctx); err != nil {
 						t.Fatalf("Sign: %v", err)
 					}
-					enc, err := want.PrivateMessage(cs, r, vec.SenderDataSecret, 16)
+					enc, err := want.privateMessage(cs, r, vec.SenderDataSecret, 16)
 					if err != nil {
 						t.Fatalf("PrivateMessage: %v", err)
 					}
-					recv := NewSecretTree(cs, protectionMembers, vec.EncryptionSecret)
-					got, err = enc.AuthenticatedContent(cs, recv, vec.SenderDataSecret)
+					recv := newSecretTree(cs, protectionMembers, vec.EncryptionSecret)
+					got, err = enc.authenticatedContent(cs, recv, vec.SenderDataSecret)
 					if err != nil {
 						t.Fatalf("unprotect our own private message: %v", err)
 					}
@@ -235,7 +235,7 @@ func TestSenderDataDoesNotSpendKeys(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	forged, err := m.PrivateMessage.sealSenderData(cs, c.Schedule.SenderDataSecret, &SenderData{
+	forged, err := m.PrivateMessage.sealSenderData(cs, c.schedule.SenderDataSecret, &SenderData{
 		LeafIndex:  uint32(b.Index),
 		Generation: 20,
 	})
@@ -267,7 +267,7 @@ func TestSenderDataGenerationBound(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	forged, err := m.PrivateMessage.sealSenderData(cs, b.Schedule.SenderDataSecret, &SenderData{
+	forged, err := m.PrivateMessage.sealSenderData(cs, b.schedule.SenderDataSecret, &SenderData{
 		LeafIndex:  uint32(b.Index),
 		Generation: 1 << 31,
 	})

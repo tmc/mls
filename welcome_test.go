@@ -66,9 +66,9 @@ func TestWelcomeVectors(t *testing.T) {
 				t.Errorf("GroupInfo.Verify: %v", err)
 			}
 
-			ks, err := NewKeySchedule(cs, secrets.JoinerSecret, nil, &info.GroupContext)
+			ks, err := newKeySchedule(cs, secrets.JoinerSecret, nil, &info.GroupContext)
 			if err != nil {
-				t.Fatalf("NewKeySchedule: %v", err)
+				t.Fatalf("newKeySchedule: %v", err)
 			}
 			tag, err := cs.ConfirmationTag(ks.ConfirmationKey, info.GroupContext.ConfirmedTranscriptHash)
 			if err != nil {

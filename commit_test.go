@@ -111,18 +111,18 @@ func pathlessCommit(t *testing.T, g *Group, ps []*Proposal) *Message {
 		t.Fatal(err)
 	}
 	commitSecret := make([]byte, cs.HashSize()) // no path, so all zero
-	joiner, err := cs.JoinerSecret(g.Schedule.InitSecret, commitSecret, &next.Context)
+	joiner, err := cs.JoinerSecret(g.schedule.InitSecret, commitSecret, &next.Context)
 	if err != nil {
 		t.Fatal(err)
 	}
-	sched, err := NewKeySchedule(cs, joiner, nil, &next.Context)
+	sched, err := newKeySchedule(cs, joiner, nil, &next.Context)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if c.Auth.ConfirmationTag, err = cs.ConfirmationTag(sched.ConfirmationKey, next.Context.ConfirmedTranscriptHash); err != nil {
 		t.Fatal(err)
 	}
-	pm, err := c.PublicMessage(cs, g.Schedule.MembershipKey, &g.Context)
+	pm, err := c.PublicMessage(cs, g.schedule.MembershipKey, &g.Context)
 	if err != nil {
 		t.Fatal(err)
 	}

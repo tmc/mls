@@ -21,11 +21,11 @@
 // Above the wire format, the package provides the cryptographic layer
 // the protocol is built from: [CipherSuite] holds the labeled
 // derivation, signature and HPKE operations of Section 5 and
-// Section 8, [KeySchedule] derives an epoch's secrets, [SecretTree]
-// derives the keys that protect its messages, and [RatchetTree]
-// implements the tree hashes, parent hashes, membership changes and
-// TreeKEM update paths. [AuthenticatedContent] frames and encrypts
-// messages.
+// Section 8, and [RatchetTree] implements the tree hashes, parent
+// hashes, membership changes and TreeKEM update paths. The key
+// schedule of Section 8 and the secret tree of Section 9 are internal
+// to the package; a [Group] reaches them for you, and [Group.Export]
+// is the supported way to derive an application secret from an epoch.
 //
 // [Client] and [Group] tie these together into the group state
 // machine. RFC 9420, Section 14 requires that generating a commit not

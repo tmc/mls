@@ -33,13 +33,13 @@ type Group struct {
 	CipherSuite CipherSuite
 	Context     GroupContext
 	Tree        RatchetTree
-	Schedule    *KeySchedule
+	schedule    *keySchedule
 	Index       LeafIndex    // the member's own leaf
 	Secrets     *TreeSecrets // the member's private view of the tree
 
 	client     *Client
 	interim    []byte // interim transcript hash
-	keys       *SecretTree
+	keys       *secretTree
 	proposals  map[string]*AuthenticatedContent // by proposal reference
 	updates    map[string][]byte                // encryption keys of one's own updates, by public key
 	resumption map[uint64][]byte                // resumption PSKs, by epoch
@@ -51,7 +51,16 @@ type Group struct {
 // EpochAuthenticator is the value that members compare out of band to
 // confirm they agree on the history of the group.
 // See RFC 9420, Section 8.
-func (g *Group) EpochAuthenticator() []byte { return g.Schedule.EpochAuthenticator }
+func (g *Group) EpochAuthenticator() []byte { return g.schedule.EpochAuthenticator }
+
+// Export implements MLS-Exporter: it derives an application secret of
+// the given length, bound to label and context, that only the members
+// of this epoch can compute. Two members of the same epoch that pass
+// the same arguments get the same secret, and no other epoch does.
+// See RFC 9420, Section 8.5.
+func (g *Group) Export(label string, context []byte, length uint16) ([]byte, error) {
+	return g.schedule.Export(label, context, length)
+}
 
 // Epoch is the number of the epoch g describes.
 func (g *Group) Epoch() uint64 { return g.Context.Epoch }
@@ -124,7 +133,7 @@ func (c *Client) join(w *Welcome, tree RatchetTree, old *Group) (*Group, error) 
 		}
 	}
 
-	schedule, err := NewKeySchedule(cs, secrets.JoinerSecret, pskSecret, &info.GroupContext)
+	schedule, err := newKeySchedule(cs, secrets.JoinerSecret, pskSecret, &info.GroupContext)
 	if err != nil {
 		return nil, err
 	}
@@ -157,12 +166,12 @@ func (c *Client) join(w *Welcome, tree RatchetTree, old *Group) (*Group, error) 
 		CipherSuite: cs,
 		Context:     info.GroupContext,
 		Tree:        tree,
-		Schedule:    schedule,
+		schedule:    schedule,
 		Index:       index,
 		Secrets:     private,
 		client:      c,
 		interim:     interim,
-		keys:        NewSecretTree(cs, tree.Size(), schedule.EncryptionSecret),
+		keys:        newSecretTree(cs, tree.Size(), schedule.EncryptionSecret),
 		proposals:   make(map[string]*AuthenticatedContent),
 		updates:     make(map[string][]byte),
 		resumption:  map[uint64][]byte{info.GroupContext.Epoch: schedule.ResumptionPSK},
@@ -233,9 +242,9 @@ func (g *Group) Unprotect(m *Message) (*AuthenticatedContent, error) {
 	public := m.PublicMessage != nil
 	switch {
 	case public:
-		c, err = m.PublicMessage.AuthenticatedContent(cs, g.Schedule.MembershipKey, &g.Context)
+		c, err = m.PublicMessage.AuthenticatedContent(cs, g.schedule.MembershipKey, &g.Context)
 	case m.PrivateMessage != nil:
-		c, err = m.PrivateMessage.AuthenticatedContent(cs, g.keys, g.Schedule.SenderDataSecret)
+		c, err = m.PrivateMessage.authenticatedContent(cs, g.keys, g.schedule.SenderDataSecret)
 	default:
 		return nil, ErrNotForGroup
 	}
@@ -308,11 +317,11 @@ func (g *Group) Protect(authenticatedData, plaintext []byte) (*Message, error) {
 	if err := c.Sign(cs, g.client.SignaturePriv, g.Context.Version, &g.Context); err != nil {
 		return nil, err
 	}
-	ratchet, err := g.keys.Ratchet(g.Index, ContentTypeApplication)
+	ratchet, err := g.keys.ratchet(g.Index, ContentTypeApplication)
 	if err != nil {
 		return nil, err
 	}
-	pm, err := c.PrivateMessage(cs, ratchet, g.Schedule.SenderDataSecret, 0)
+	pm, err := c.privateMessage(cs, ratchet, g.schedule.SenderDataSecret, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -515,9 +524,9 @@ func (g *Group) ApplyCommit(c *AuthenticatedContent) (*Group, error) {
 	}
 	// An external commit replaces the previous epoch's init secret
 	// with one the joiner sent. See RFC 9420, Section 8.3.
-	initSecret := g.Schedule.InitSecret
+	initSecret := g.schedule.InitSecret
 	if external {
-		if initSecret, err = g.Schedule.ExternalInit(ch.kemOutput); err != nil {
+		if initSecret, err = g.schedule.ExternalInit(ch.kemOutput); err != nil {
 			return nil, err
 		}
 	}
@@ -525,10 +534,10 @@ func (g *Group) ApplyCommit(c *AuthenticatedContent) (*Group, error) {
 	if err != nil {
 		return nil, err
 	}
-	if next.Schedule, err = NewKeySchedule(cs, joiner, pskSecret, &next.Context); err != nil {
+	if next.schedule, err = newKeySchedule(cs, joiner, pskSecret, &next.Context); err != nil {
 		return nil, err
 	}
-	tag, err := cs.ConfirmationTag(next.Schedule.ConfirmationKey, next.Context.ConfirmedTranscriptHash)
+	tag, err := cs.ConfirmationTag(next.schedule.ConfirmationKey, next.Context.ConfirmedTranscriptHash)
 	if err != nil {
 		return nil, err
 	}
@@ -538,8 +547,8 @@ func (g *Group) ApplyCommit(c *AuthenticatedContent) (*Group, error) {
 	if next.interim, err = cs.InterimTranscriptHash(next.Context.ConfirmedTranscriptHash, c.Auth.ConfirmationTag); err != nil {
 		return nil, err
 	}
-	next.keys = NewSecretTree(cs, next.Tree.Size(), next.Schedule.EncryptionSecret)
-	next.resumption[next.Context.Epoch] = next.Schedule.ResumptionPSK
+	next.keys = newSecretTree(cs, next.Tree.Size(), next.schedule.EncryptionSecret)
+	next.resumption[next.Context.Epoch] = next.schedule.ResumptionPSK
 	if err := next.Secrets.Consistent(cs, next.Tree); err != nil {
 		return nil, err
 	}

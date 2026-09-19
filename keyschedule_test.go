@@ -78,9 +78,9 @@ func TestKeyScheduleVectors(t *testing.T) {
 				if !bytes.Equal(joiner, e.JoinerSecret) {
 					t.Errorf("epoch %d: joiner_secret = %x, want %x", i, joiner, e.JoinerSecret)
 				}
-				ks, err := NewKeySchedule(cs, joiner, e.PSKSecret, ctx)
+				ks, err := newKeySchedule(cs, joiner, e.PSKSecret, ctx)
 				if err != nil {
-					t.Fatalf("epoch %d: NewKeySchedule: %v", i, err)
+					t.Fatalf("epoch %d: newKeySchedule: %v", i, err)
 				}
 				for _, f := range []struct {
 					name string

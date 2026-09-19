@@ -6,11 +6,11 @@ import (
 	"github.com/tmc/mls/tlssyntax"
 )
 
-// A KeySchedule holds the secrets of one epoch. Each epoch's schedule
+// A keySchedule holds the secrets of one epoch. Each epoch's schedule
 // is derived from the previous epoch's init secret, the commit secret
 // produced by the commit that ended it, and the group context of the
 // new epoch. See RFC 9420, Section 8.
-type KeySchedule struct {
+type keySchedule struct {
 	CipherSuite CipherSuite
 
 	JoinerSecret  []byte
@@ -43,11 +43,11 @@ func (cs CipherSuite) JoinerSecret(initSecret, commitSecret []byte, ctx *GroupCo
 	return cs.ExpandWithLabel(extracted, "joiner", b, uint16(cs.HashSize()))
 }
 
-// NewKeySchedule derives the secrets of an epoch from its joiner
+// newKeySchedule derives the secrets of an epoch from its joiner
 // secret, the PSK secret of any pre-shared keys the commit injected,
 // and the epoch's group context. A nil pskSecret means no PSKs, which
 // RFC 9420 treats as an all-zero secret.
-func NewKeySchedule(cs CipherSuite, joinerSecret, pskSecret []byte, ctx *GroupContext) (*KeySchedule, error) {
+func newKeySchedule(cs CipherSuite, joinerSecret, pskSecret []byte, ctx *GroupContext) (*keySchedule, error) {
 	if pskSecret == nil {
 		pskSecret = make([]byte, cs.HashSize())
 	}
@@ -79,9 +79,9 @@ func NewKeySchedule(cs CipherSuite, joinerSecret, pskSecret []byte, ctx *GroupCo
 // newEpochSchedule derives the secrets of an epoch from the epoch
 // secret itself. Group creation starts here, with a fresh random
 // epoch secret; every later epoch reaches the same point through
-// [NewKeySchedule]. See RFC 9420, Section 11.
-func newEpochSchedule(cs CipherSuite, epochSecret []byte) (*KeySchedule, error) {
-	ks := &KeySchedule{CipherSuite: cs, EpochSecret: epochSecret}
+// [newKeySchedule]. See RFC 9420, Section 11.
+func newEpochSchedule(cs CipherSuite, epochSecret []byte) (*keySchedule, error) {
+	ks := &keySchedule{CipherSuite: cs, EpochSecret: epochSecret}
 	var err error
 	for _, d := range []struct {
 		label string
@@ -107,7 +107,7 @@ func newEpochSchedule(cs CipherSuite, epochSecret []byte) (*KeySchedule, error) 
 // ExternalPub returns the public half of the external init key pair,
 // which a GroupInfo publishes so that non-members can join by
 // external commit. See RFC 9420, Section 8.
-func (ks *KeySchedule) ExternalPub() (HPKEPublicKey, error) {
+func (ks *keySchedule) ExternalPub() (HPKEPublicKey, error) {
 	p, err := ks.CipherSuite.params()
 	if err != nil {
 		return nil, err
@@ -121,7 +121,7 @@ func (ks *KeySchedule) ExternalPub() (HPKEPublicKey, error) {
 
 // Export implements MLS-Exporter: it derives an application secret
 // bound to label and context. See RFC 9420, Section 8.5.
-func (ks *KeySchedule) Export(label string, context []byte, length uint16) ([]byte, error) {
+func (ks *keySchedule) Export(label string, context []byte, length uint16) ([]byte, error) {
 	cs := ks.CipherSuite
 	secret, err := cs.DeriveSecret(ks.ExporterSecret, label)
 	if err != nil {
@@ -187,7 +187,7 @@ func (cs CipherSuite) WelcomeSecret(joinerSecret, pskSecret []byte) ([]byte, err
 // ExternalInit derives the init secret an external joiner sent in the
 // kem_output of its ExternalInit proposal. It is the counterpart of
 // [CipherSuite.ExternalInit]. See RFC 9420, Section 8.3.
-func (ks *KeySchedule) ExternalInit(kemOutput []byte) ([]byte, error) {
+func (ks *keySchedule) ExternalInit(kemOutput []byte) ([]byte, error) {
 	cs := ks.CipherSuite
 	p, err := cs.params()
 	if err != nil {

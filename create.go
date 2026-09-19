@@ -93,18 +93,18 @@ func (c *Client) NewGroup(groupID []byte, extensions Extensions) (*Group, error)
 	if _, err := rand.Read(epochSecret); err != nil {
 		return nil, err
 	}
-	if g.Schedule, err = newEpochSchedule(cs, epochSecret); err != nil {
+	if g.schedule, err = newEpochSchedule(cs, epochSecret); err != nil {
 		return nil, err
 	}
-	tag, err := cs.ConfirmationTag(g.Schedule.ConfirmationKey, nil)
+	tag, err := cs.ConfirmationTag(g.schedule.ConfirmationKey, nil)
 	if err != nil {
 		return nil, err
 	}
 	if g.interim, err = cs.InterimTranscriptHash(nil, tag); err != nil {
 		return nil, err
 	}
-	g.keys = NewSecretTree(cs, tree.Size(), g.Schedule.EncryptionSecret)
-	g.resumption[0] = g.Schedule.ResumptionPSK
+	g.keys = newSecretTree(cs, tree.Size(), g.schedule.EncryptionSecret)
+	g.resumption[0] = g.schedule.ResumptionPSK
 	return g, nil
 }
 
@@ -133,7 +133,7 @@ func (g *Group) Propose(p *Proposal) (*Message, error) {
 	if err := g.AddProposal(c); err != nil {
 		return nil, err
 	}
-	pm, err := c.PublicMessage(g.CipherSuite, g.Schedule.MembershipKey, &g.Context)
+	pm, err := c.PublicMessage(g.CipherSuite, g.schedule.MembershipKey, &g.Context)
 	if err != nil {
 		return nil, err
 	}
@@ -345,23 +345,23 @@ func (g *Group) commit(extra []*Proposal, sender SenderType) (*Group, *Message, 
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	joiner, err := cs.JoinerSecret(g.Schedule.InitSecret, commitSecret, &next.Context)
+	joiner, err := cs.JoinerSecret(g.schedule.InitSecret, commitSecret, &next.Context)
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	if next.Schedule, err = NewKeySchedule(cs, joiner, pskSecret, &next.Context); err != nil {
+	if next.schedule, err = newKeySchedule(cs, joiner, pskSecret, &next.Context); err != nil {
 		return nil, nil, nil, err
 	}
-	if c.Auth.ConfirmationTag, err = cs.ConfirmationTag(next.Schedule.ConfirmationKey, next.Context.ConfirmedTranscriptHash); err != nil {
+	if c.Auth.ConfirmationTag, err = cs.ConfirmationTag(next.schedule.ConfirmationKey, next.Context.ConfirmedTranscriptHash); err != nil {
 		return nil, nil, nil, err
 	}
 	if next.interim, err = cs.InterimTranscriptHash(next.Context.ConfirmedTranscriptHash, c.Auth.ConfirmationTag); err != nil {
 		return nil, nil, nil, err
 	}
-	next.keys = NewSecretTree(cs, next.Tree.Size(), next.Schedule.EncryptionSecret)
-	next.resumption[next.Context.Epoch] = next.Schedule.ResumptionPSK
+	next.keys = newSecretTree(cs, next.Tree.Size(), next.schedule.EncryptionSecret)
+	next.resumption[next.Context.Epoch] = next.schedule.ResumptionPSK
 
-	pm, err := c.PublicMessage(cs, g.Schedule.MembershipKey, &g.Context)
+	pm, err := c.PublicMessage(cs, g.schedule.MembershipKey, &g.Context)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -394,7 +394,7 @@ func (g *Group) welcome(confirmationTag []byte, proposals []proposal, added []Le
 		return nil, err
 	}
 	w := &Welcome{CipherSuite: cs}
-	if err := w.SetGroupInfo(g.Schedule.WelcomeSecret, info); err != nil {
+	if err := w.SetGroupInfo(g.schedule.WelcomeSecret, info); err != nil {
 		return nil, err
 	}
 
@@ -420,7 +420,7 @@ func (g *Group) welcome(confirmationTag []byte, proposals []proposal, added []Le
 		if err != nil {
 			return nil, err
 		}
-		secrets := &GroupSecrets{JoinerSecret: g.Schedule.JoinerSecret, PSKs: psks}
+		secrets := &GroupSecrets{JoinerSecret: g.schedule.JoinerSecret, PSKs: psks}
 		if secret, ok := g.Secrets.Secrets[commonAncestor(i, g.Index)]; ok {
 			secrets.PathSecret = secret
 		}

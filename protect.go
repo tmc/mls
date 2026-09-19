@@ -50,7 +50,7 @@ func (m *PublicMessage) AuthenticatedContent(cs CipherSuite, membershipKey []byt
 // r must be that member's ratchet for c's content type, and padding
 // is the number of zero bytes to append to the plaintext to blur its
 // length. See RFC 9420, Section 6.3.
-func (c *AuthenticatedContent) PrivateMessage(cs CipherSuite, r *Ratchet, senderDataSecret []byte, padding int) (*PrivateMessage, error) {
+func (c *AuthenticatedContent) privateMessage(cs CipherSuite, r *ratchet, senderDataSecret []byte, padding int) (*PrivateMessage, error) {
 	if c.Content.Sender.Type != SenderTypeMember {
 		return nil, ErrNotMember
 	}
@@ -100,12 +100,12 @@ func (c *AuthenticatedContent) PrivateMessage(cs CipherSuite, r *Ratchet, sender
 // sender's ratchet from tree, so tree must be the secret tree of the
 // epoch the message was sent in. The caller must still verify the
 // signature; see [AuthenticatedContent.Verify].
-func (m *PrivateMessage) AuthenticatedContent(cs CipherSuite, tree *SecretTree, senderDataSecret []byte) (*AuthenticatedContent, error) {
+func (m *PrivateMessage) authenticatedContent(cs CipherSuite, tree *secretTree, senderDataSecret []byte) (*AuthenticatedContent, error) {
 	data, err := m.openSenderData(cs, senderDataSecret)
 	if err != nil {
 		return nil, err
 	}
-	r, err := tree.Ratchet(LeafIndex(data.LeafIndex), m.ContentType)
+	r, err := tree.ratchet(LeafIndex(data.LeafIndex), m.ContentType)
 	if err != nil {
 		return nil, err
 	}

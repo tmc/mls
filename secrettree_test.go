@@ -51,12 +51,12 @@ func TestSecretTreeVectors(t *testing.T) {
 			// Each ratchet may be taken only once, so build a
 			// fresh tree for each content type.
 			for _, ct := range []ContentType{ContentTypeApplication, ContentTypeProposal} {
-				tree := NewSecretTree(cs, n, vec.EncryptionSecret)
+				tree := newSecretTree(cs, n, vec.EncryptionSecret)
 				for i, steps := range vec.Leaves {
 					leaf := LeafIndex(i)
-					r, err := tree.Ratchet(leaf, ct)
+					r, err := tree.ratchet(leaf, ct)
 					if err != nil {
-						t.Fatalf("leaf %d: Ratchet: %v", i, err)
+						t.Fatalf("leaf %d: ratchet: %v", i, err)
 					}
 					for _, step := range steps {
 						key, nonce, advance, err := r.Key(step.Generation)
@@ -86,8 +86,8 @@ func TestSecretTreeVectors(t *testing.T) {
 // it cannot afford.
 func TestRatchetKeyBounds(t *testing.T) {
 	cs := X25519AES128GCMSHA256Ed25519
-	tr := NewSecretTree(cs, 2, make([]byte, cs.HashSize()))
-	r, err := tr.Ratchet(0, ContentTypeApplication)
+	tr := newSecretTree(cs, 2, make([]byte, cs.HashSize()))
+	r, err := tr.ratchet(0, ContentTypeApplication)
 	if err != nil {
 		t.Fatal(err)
 	}

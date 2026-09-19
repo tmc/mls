@@ -66,7 +66,7 @@ func (c *Client) JoinExternal(info *GroupInfo, tree RatchetTree) (*Group, *Messa
 		CipherSuite: cs,
 		Context:     info.GroupContext,
 		Tree:        tree.Clone(),
-		Schedule:    &KeySchedule{CipherSuite: cs, InitSecret: initSecret},
+		schedule:    &keySchedule{CipherSuite: cs, InitSecret: initSecret},
 		client:      c,
 		interim:     interim,
 		proposals:   make(map[string]*AuthenticatedContent),
@@ -154,11 +154,11 @@ func externalProposalsOK(commit *Commit) error {
 // See RFC 9420, Section 12.4.3.2.
 func (g *Group) GroupInfo() (*Message, error) {
 	cs := g.CipherSuite
-	tag, err := cs.ConfirmationTag(g.Schedule.ConfirmationKey, g.Context.ConfirmedTranscriptHash)
+	tag, err := cs.ConfirmationTag(g.schedule.ConfirmationKey, g.Context.ConfirmedTranscriptHash)
 	if err != nil {
 		return nil, err
 	}
-	pub, err := g.Schedule.ExternalPub()
+	pub, err := g.schedule.ExternalPub()
 	if err != nil {
 		return nil, err
 	}

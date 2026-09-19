@@ -1,19 +1,19 @@
 package mls
 
-// A SecretTree derives the keys that protect an epoch's messages. It
+// A secretTree derives the keys that protect an epoch's messages. It
 // has the same shape as the group's ratchet tree: the encryption
 // secret sits at the root, each parent splits into two child secrets,
 // and each leaf starts a pair of hash ratchets, one for handshake
 // messages and one for application messages.
 //
-// Secrets are deleted as they are consumed, so a SecretTree can be
+// Secrets are deleted as they are consumed, so a secretTree can be
 // walked to each leaf only once, and each ratchet only forward.
 // See RFC 9420, Section 9.
-type SecretTree struct {
+type secretTree struct {
 	cs       CipherSuite
 	n        LeafIndex
 	secrets  map[NodeIndex][]byte
-	ratchets map[ratchetKey]*Ratchet
+	ratchets map[ratchetKey]*ratchet
 }
 
 // A ratchetKey identifies one member's ratchet for one kind of
@@ -23,14 +23,14 @@ type ratchetKey struct {
 	typ  ContentType
 }
 
-// NewSecretTree returns the secret tree for an epoch of a group with
+// newSecretTree returns the secret tree for an epoch of a group with
 // n members, rooted at the epoch's encryption secret.
-func NewSecretTree(cs CipherSuite, n LeafIndex, encryptionSecret []byte) *SecretTree {
-	t := &SecretTree{
+func newSecretTree(cs CipherSuite, n LeafIndex, encryptionSecret []byte) *secretTree {
+	t := &secretTree{
 		cs:       cs,
 		n:        n,
 		secrets:  make(map[NodeIndex][]byte),
-		ratchets: make(map[ratchetKey]*Ratchet),
+		ratchets: make(map[ratchetKey]*ratchet),
 	}
 	t.secrets[root(n)] = encryptionSecret
 	return t
@@ -38,7 +38,7 @@ func NewSecretTree(cs CipherSuite, n LeafIndex, encryptionSecret []byte) *Secret
 
 // secret returns the secret at x, deriving it from its ancestors and
 // deleting each secret it consumes on the way down.
-func (t *SecretTree) secret(x NodeIndex) ([]byte, error) {
+func (t *secretTree) secret(x NodeIndex) ([]byte, error) {
 	if s, ok := t.secrets[x]; ok {
 		delete(t.secrets, x)
 		if s == nil {
@@ -71,12 +71,12 @@ func (t *SecretTree) secret(x NodeIndex) ([]byte, error) {
 	}
 }
 
-// Ratchet returns the hash ratchet that protects messages of the
+// ratchet returns the hash ratchet that protects messages of the
 // given content type sent by the member at leaf. Handshake messages
 // (proposals and commits) and application messages use separate
 // ratchets. The tree keeps each ratchet it derives, so repeated calls
 // return the same one, at whatever generation it has reached.
-func (t *SecretTree) Ratchet(leaf LeafIndex, typ ContentType) (*Ratchet, error) {
+func (t *secretTree) ratchet(leaf LeafIndex, typ ContentType) (*ratchet, error) {
 	if r, ok := t.ratchets[ratchetKey{leaf, typ}]; ok {
 		return r, nil
 	}
@@ -100,27 +100,27 @@ func (t *SecretTree) Ratchet(leaf LeafIndex, typ ContentType) (*Ratchet, error) 
 	if err != nil {
 		return nil, err
 	}
-	r := &Ratchet{cs: t.cs, secret: secret}
+	r := &ratchet{cs: t.cs, secret: secret}
 	t.ratchets[ratchetKey{leaf, typ}] = r
 	return r, nil
 }
 
-// A Ratchet produces the sequence of single-use keys and nonces that
+// A ratchet produces the sequence of single-use keys and nonces that
 // one member uses for one kind of message within one epoch.
 // See RFC 9420, Section 9.1.
-type Ratchet struct {
+type ratchet struct {
 	cs         CipherSuite
 	secret     []byte
 	generation uint32
 }
 
 // Generation is the generation the ratchet will next produce.
-func (r *Ratchet) Generation() uint32 { return r.generation }
+func (r *ratchet) Generation() uint32 { return r.generation }
 
 // Next returns the key and nonce for the current generation and
 // advances the ratchet. The caller must not reuse a key and nonce for
 // more than one message.
-func (r *Ratchet) Next() (key, nonce []byte, err error) {
+func (r *ratchet) Next() (key, nonce []byte, err error) {
 	cs := r.cs
 	gen := r.generation
 	if nonce, err = cs.DeriveTreeSecret(r.secret, "nonce", gen, uint16(cs.AEADNonceSize())); err != nil {
@@ -153,14 +153,14 @@ const maxGenerationJump = 1024
 // in between are skipped and their keys discarded, and a generation
 // the ratchet has already passed is gone: RFC 9420, Section 9.2
 // requires that keys be deleted as they are consumed.
-func (r *Ratchet) Key(generation uint32) (key, nonce []byte, advance func(), err error) {
+func (r *ratchet) Key(generation uint32) (key, nonce []byte, advance func(), err error) {
 	if generation < r.generation {
 		return nil, nil, nil, ErrConsumed
 	}
 	if generation-r.generation > maxGenerationJump {
 		return nil, nil, nil, ErrGenerationJump
 	}
-	ahead := &Ratchet{cs: r.cs, secret: r.secret, generation: r.generation}
+	ahead := &ratchet{cs: r.cs, secret: r.secret, generation: r.generation}
 	for {
 		key, nonce, err := ahead.Next()
 		if err != nil {
