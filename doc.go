@@ -62,6 +62,32 @@
 //
 // Credential types outside RFC 9420 are registered by subpackages:
 // see [RegisterCredential] and [github.com/tmc/mls/multicred].
+//
+// # Security
+//
+// This package has not been audited. Passing the working group's
+// vectors is evidence about correctness, not about resistance to
+// attack.
+//
+// Every operation that touches a private key runs under
+// [crypto/subtle.WithDataIndependentTiming], which on an arm64 CPU
+// with FEAT_DIT removes the operand dependence of instructions whose
+// latency would otherwise vary. That is a floor, not a guarantee. It
+// does not make variable-time code constant time, and in particular
+// it does not hide a cache-timing signal, because the mode says
+// nothing about which memory a program touches. The case that
+// matters here is AES: on a CPU without AES instructions the standard
+// library falls back to a table-driven implementation whose lookups
+// are indexed by key material, which is the input a flush-and-reload
+// attacker measures. On such a CPU prefer a ChaCha20-Poly1305 cipher
+// suite, whose implementation is table-free.
+//
+// Two properties the package does not claim. Secrets live in ordinary
+// Go byte slices and are not zeroed when consumed, so the deletion
+// requirement of RFC 9420, Section 9.2 is met logically but not in
+// memory; Go offers no way to guarantee a wipe survives the
+// optimizer. And [Group.Protect] seals a message at its natural
+// length, so the package does not defend against traffic analysis.
 package mls
 
 import "github.com/tmc/mls/tlssyntax"
