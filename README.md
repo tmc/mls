@@ -88,8 +88,8 @@ about resistance to attack.
 Two properties it does not claim: secrets live in ordinary Go byte
 slices and are not zeroed when consumed, so RFC 9420 Section 9.2's
 deletion requirement is met logically but not in memory; and the
-package does not defend against traffic analysis beyond the padding
-parameter Group.Protect takes.
+package does not defend against traffic analysis, since Group.Protect
+seals a message at its natural length and exposes no padding.
 
 Report a vulnerability by opening an issue.
 
