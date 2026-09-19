@@ -186,6 +186,47 @@ func (g *Group) Commit(extra []*Proposal) (*Group, *MLSMessage, *MLSMessage, err
 	return g.commit(extra, SenderTypeMember)
 }
 
+// staged returns the proposals g has been given for this epoch that a
+// commit carrying extra may also carry, in a stable order.
+//
+// RFC 9420, Section 12.2 allows a commit to cover at most one Update
+// or Remove for any one leaf, so the ones that conflict have to be
+// settled before the commit is built rather than rejected after. The
+// commit's own proposals decide the leaves they touch, and a removal
+// decides over an update of the leaf it removes; a staged proposal
+// that loses is left behind for a later epoch. A commit never carries
+// a proposal for its sender's own leaf either: the sender's leaf is
+// replaced by the update path, and a member cannot remove itself.
+func (g *Group) staged(extra []*Proposal, from Sender) []*AuthenticatedContent {
+	touched := make(map[LeafIndex]bool)
+	for _, p := range extra {
+		if i, ok := touchedLeaf(p, from); ok {
+			touched[i] = true
+		}
+	}
+	refs := slices.Sorted(maps.Keys(g.proposals))
+	out := make([]*AuthenticatedContent, 0, len(refs))
+	// Removals first, so that an update of a leaf a staged removal
+	// covers is the one left behind and not the other way round.
+	for _, removes := range []bool{true, false} {
+		for _, ref := range refs {
+			c := g.proposals[ref]
+			p := c.Content.Proposal
+			if (p.Type == ProposalTypeRemove) != removes {
+				continue
+			}
+			if i, ok := touchedLeaf(p, c.Content.Sender); ok {
+				if touched[i] || i == g.Index {
+					continue
+				}
+				touched[i] = true
+			}
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
 // commit builds a commit from the proposals g has seen and the extra
 // proposals given, as a member or as a new member joining by external
 // commit. The two differ in who signs the commit and in how the new
@@ -202,14 +243,7 @@ func (g *Group) commit(extra []*Proposal, sender SenderType) (*Group, *MLSMessag
 	}
 	proposals := make([]proposal, 0, len(g.proposals)+len(extra))
 	if sender == SenderTypeMember {
-		for _, ref := range slices.Sorted(maps.Keys(g.proposals)) {
-			c := g.proposals[ref]
-			// A commit must not carry its sender's own update:
-			// the sender's leaf is replaced by the update path
-			// instead. See RFC 9420, Section 12.2.
-			if c.Content.Proposal.Type == ProposalTypeUpdate && LeafIndex(c.Content.Sender.LeafIndex) == g.Index {
-				continue
-			}
+		for _, c := range g.staged(extra, from) {
 			r, err := c.Ref(cs)
 			if err != nil {
 				return nil, nil, nil, err

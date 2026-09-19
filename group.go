@@ -339,6 +339,12 @@ func (g *Group) Handle(m *MLSMessage) (*Group, error) {
 
 // AddProposal remembers a proposal so that a later commit can refer
 // to it by reference.
+//
+// A member that rotates its keys twice in one epoch supersedes its
+// own earlier update: only the later one is remembered. RFC 9420,
+// Section 12.2 allows a commit to cover at most one update for any
+// one leaf, and the order the proposals arrived in is known here and
+// nowhere else, so this is where the choice between them belongs.
 func (g *Group) AddProposal(c *AuthenticatedContent) error {
 	if c.Content.ContentType != ContentTypeProposal {
 		return ErrNotProposal
@@ -346,6 +352,17 @@ func (g *Group) AddProposal(c *AuthenticatedContent) error {
 	ref, err := c.Ref(g.CipherSuite)
 	if err != nil {
 		return err
+	}
+	if c.Content.Proposal.Type == ProposalTypeUpdate {
+		if i, ok := touchedLeaf(c.Content.Proposal, c.Content.Sender); ok {
+			for r, old := range g.proposals {
+				p := old.Content.Proposal
+				if j, ok := touchedLeaf(p, old.Content.Sender); ok &&
+					p.Type == ProposalTypeUpdate && j == i {
+					delete(g.proposals, r)
+				}
+			}
+		}
 	}
 	g.proposals[hex.EncodeToString(ref)] = c
 	return nil

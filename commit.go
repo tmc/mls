@@ -136,6 +136,21 @@ func (g *GroupSecrets) UnmarshalTLS(r *tlssyntax.Reader) {
 	})
 }
 
+// touchedLeaf reports the leaf an Update or Remove proposal applies
+// to, given the sender that sent it. RFC 9420, Section 12.2 allows a
+// commit to cover at most one such proposal for any one leaf.
+func touchedLeaf(p *Proposal, from Sender) (LeafIndex, bool) {
+	switch p.Type {
+	case ProposalTypeUpdate:
+		if from.Type == SenderTypeMember {
+			return LeafIndex(from.LeafIndex), true
+		}
+	case ProposalTypeRemove:
+		return LeafIndex(p.Remove.Removed), true
+	}
+	return 0, false
+}
+
 // pathRequired reports whether a commit covering these proposals must
 // carry an update path. A commit that covers nothing must update the
 // committer's own keys, and Update, Remove, ExternalInit and
