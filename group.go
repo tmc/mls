@@ -45,7 +45,7 @@ type Group struct {
 	resumption map[uint64][]byte                // resumption PSKs, by epoch
 	prior      *Group                           // the group this one was resumed from
 	resumed    *PreSharedKeyID                  // the key that links it to prior
-	reinit     *ReInit                          // set by a commit that reinitializes
+	reinit     *Reinit                          // set by a commit that reinitializes
 }
 
 // EpochAuthenticator is the value that members compare out of band to
@@ -406,7 +406,7 @@ func (g *Group) resolve(commit *Commit, committer Sender) ([]proposal, error) {
 // See RFC 9420, Section 12.4.2.
 func (g *Group) ApplyCommit(c *AuthenticatedContent) (*Group, error) {
 	if g.reinit != nil {
-		return nil, ErrReInitialized
+		return nil, ErrReinitialized
 	}
 	cs := g.CipherSuite
 	if c.Content.ContentType != ContentTypeCommit {
@@ -552,7 +552,7 @@ type changes struct {
 	added     []LeafIndex      // leaves added, which receive no path secret
 	psks      []PreSharedKeyID // pre-shared keys the commit injects
 	kemOutput []byte           // set by an ExternalInit proposal
-	reinit    *ReInit          // set by a ReInit proposal
+	reinit    *Reinit          // set by a Reinit proposal
 }
 
 // apply applies a commit's proposals to the tree and the group
@@ -617,8 +617,8 @@ func (g *Group) apply(proposals []proposal) (*changes, error) {
 				return nil, ErrBadExternalCommit
 			}
 			ch.kemOutput = p.ExternalInit.KEMOutput
-		case ProposalTypeReInit:
-			ch.reinit = p.ReInit
+		case ProposalTypeReinit:
+			ch.reinit = p.Reinit
 		}
 	}
 	return &ch, nil

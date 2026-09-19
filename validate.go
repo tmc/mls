@@ -175,7 +175,7 @@ func (t RatchetTree) validateProposals(ps []proposal, committer LeafIndex, ctx *
 			id := p.PreSharedKey.PSK
 			if id.Type == PSKTypeResumption && ctx.Epoch != 0 {
 				switch id.Usage {
-				case ResumptionPSKUsageReInit, ResumptionPSKUsageBranch:
+				case ResumptionPSKUsageReinit, ResumptionPSKUsageBranch:
 					// Sections 11.2 and 11.3: these
 					// belong in the initial commit of
 					// the new group and nowhere else.
@@ -216,11 +216,11 @@ func (t RatchetTree) validateProposals(ps []proposal, committer LeafIndex, ctx *
 		case ProposalTypeExternalInit:
 			return fmt.Errorf("%w: external_init proposal outside an external commit", ErrProposalList)
 
-		case ProposalTypeReInit:
+		case ProposalTypeReinit:
 			if len(ps) > 1 {
 				return fmt.Errorf("%w: reinit proposal alongside others", ErrProposalList)
 			}
-			if p.ReInit.Version < ctx.Version {
+			if p.Reinit.Version < ctx.Version {
 				// Section 12.1.5: a reinitialization
 				// must not move the group backwards.
 				return fmt.Errorf("%w: reinit proposal to an older version", ErrProposalList)

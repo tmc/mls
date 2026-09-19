@@ -14,7 +14,7 @@ func TestPathRequired(t *testing.T) {
 		{"empty commit", nil, true},
 		{"add", []proposal{{Proposal: &Proposal{Type: ProposalTypeAdd}}}, false},
 		{"psk", []proposal{{Proposal: &Proposal{Type: ProposalTypePreSharedKey}}}, false},
-		{"reinit", []proposal{{Proposal: &Proposal{Type: ProposalTypeReInit}}}, false},
+		{"reinit", []proposal{{Proposal: &Proposal{Type: ProposalTypeReinit}}}, false},
 		{"update", []proposal{{Proposal: &Proposal{Type: ProposalTypeUpdate}}}, true},
 		{"remove", []proposal{{Proposal: &Proposal{Type: ProposalTypeRemove}}}, true},
 		{"external init", []proposal{{Proposal: &Proposal{Type: ProposalTypeExternalInit}}}, true},

@@ -115,7 +115,7 @@ func externalCommitOK(commit *Commit) error {
 func externalProposalType(t ProposalType) bool {
 	switch t {
 	case ProposalTypeAdd, ProposalTypeRemove, ProposalTypePreSharedKey,
-		ProposalTypeReInit, ProposalTypeGroupContextExtensions:
+		ProposalTypeReinit, ProposalTypeGroupContextExtensions:
 		return true
 	}
 	return false
@@ -209,7 +209,7 @@ type ExternalClient struct {
 
 // Propose frames p as a proposal to the group named by groupID in the
 // given epoch. Only the proposal types RFC 9420, Section 12.1.8
-// admits may be sent this way: Add, Remove, PreSharedKey, ReInit and
+// admits may be sent this way: Add, Remove, PreSharedKey, Reinit and
 // GroupContextExtensions.
 func (c *ExternalClient) Propose(groupID []byte, epoch uint64, p *Proposal) (*Message, error) {
 	if !externalProposalType(p.Type) {

@@ -51,13 +51,13 @@ func TestProposalList(t *testing.T) {
 			{Type: ProposalTypeExternalInit, ExternalInit: &ExternalInit{KEMOutput: []byte("x")}},
 		}},
 		{"reinit with another proposal", []*Proposal{
-			{Type: ProposalTypeReInit, ReInit: &ReInit{GroupID: []byte("new"), Version: Version10, CipherSuite: cs}},
+			{Type: ProposalTypeReinit, Reinit: &Reinit{GroupID: []byte("new"), Version: Version10, CipherSuite: cs}},
 			remove(1),
 		}},
 		{"reinit to an older version", []*Proposal{
-			{Type: ProposalTypeReInit, ReInit: &ReInit{GroupID: []byte("new"), Version: Version10 - 1, CipherSuite: cs}},
+			{Type: ProposalTypeReinit, Reinit: &Reinit{GroupID: []byte("new"), Version: Version10 - 1, CipherSuite: cs}},
 		}},
-		{"resumption psk for reinit", []*Proposal{psk(ResumptionPSKUsageReInit)}},
+		{"resumption psk for reinit", []*Proposal{psk(ResumptionPSKUsageReinit)}},
 		{"resumption psk for branching", []*Proposal{psk(ResumptionPSKUsageBranch)}},
 	}
 	for _, tt := range tests {

@@ -42,7 +42,7 @@
 // keys with [Group.ProposeUpdate], which keeps the new encryption key
 // so that the member can follow the commit that applies it. A group
 // ends either by
-// losing its members or by being reinitialized: see [Group.ReInit],
+// losing its members or by being reinitialized: see [Group.Reinit],
 // [Group.Reinitialize], [Group.Branch] and [Client.Resume].
 //
 // Processing a commit does not change the group it applies to:

@@ -87,7 +87,7 @@ func TestRequiredCapabilitiesSupported(t *testing.T) {
 		{"empty", RequiredCapabilities{}, true},
 		{"met", RequiredCapabilities{ExtensionTypes: []ExtensionType{ExtensionTypeApplicationID}}, true},
 		{"unmet extension", RequiredCapabilities{ExtensionTypes: []ExtensionType{ExtensionTypeExternalPub}}, false},
-		{"unmet proposal", RequiredCapabilities{ProposalTypes: []ProposalType{ProposalTypeReInit}}, false},
+		{"unmet proposal", RequiredCapabilities{ProposalTypes: []ProposalType{ProposalTypeReinit}}, false},
 		{"unmet credential", RequiredCapabilities{CredentialTypes: []CredentialType{CredentialTypeX509}}, false},
 	} {
 		if got := tc.req.Supported(caps); got != tc.want {

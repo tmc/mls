@@ -21,16 +21,16 @@ func (g *Group) resumptionPSK(id PreSharedKeyID) []byte {
 	return nil
 }
 
-// ReInit returns the reinitialization a commit of this epoch carried,
-// or nil if it carried none. A group that has committed a ReInit
+// Reinit returns the reinitialization a commit of this epoch carried,
+// or nil if it carried none. A group that has committed a Reinit
 // proposal is finished: its members send nothing further in it and
 // move to the group [Group.Reinitialize] creates.
 // See RFC 9420, Section 11.2.
-func (g *Group) ReInit() *ReInit { return g.reinit }
+func (g *Group) Reinit() *Reinit { return g.reinit }
 
 // Reinitialize creates the group that the members of g move to, which
 // is the third step of RFC 9420, Section 11.2: g must have committed
-// a ReInit proposal, and the new group takes its group ID, version,
+// a Reinit proposal, and the new group takes its group ID, version,
 // cipher suite and extensions from it. members are the key packages
 // of everyone who is to join, which the caller fetches afresh, since
 // the new group may use a different cipher suite.
@@ -40,16 +40,16 @@ func (g *Group) ReInit() *ReInit { return g.reinit }
 // link to g through a resumption pre-shared key; see [Client.Resume].
 //
 // Any member of g may do this, not only the one that committed the
-// ReInit, so that a group is not stranded by whoever went offline.
+// Reinit, so that a group is not stranded by whoever went offline.
 func (g *Group) Reinitialize(members []*KeyPackage) (*Group, *Message, error) {
 	if g.reinit == nil {
-		return nil, nil, ErrNotReInitialized
+		return nil, nil, ErrNotReinitialized
 	}
 	ri := g.reinit
 	if ri.Version != g.Context.Version {
 		return nil, nil, ErrUnsupportedVersion
 	}
-	return g.resume(ri.GroupID, ri.CipherSuite, ri.Extensions, ResumptionPSKUsageReInit, members)
+	return g.resume(ri.GroupID, ri.CipherSuite, ri.Extensions, ResumptionPSKUsageReinit, members)
 }
 
 // Branch creates a new group holding a subset of g's members, with
@@ -121,8 +121,8 @@ func (c *Client) Resume(w *Welcome, tree RatchetTree, old *Group) (*Group, error
 		return nil, ErrNotResumed
 	}
 	switch psk.Usage {
-	case ResumptionPSKUsageReInit:
-		ri := old.ReInit()
+	case ResumptionPSKUsageReinit:
+		ri := old.Reinit()
 		if ri == nil ||
 			ri.Version != g.Context.Version ||
 			ri.CipherSuite != g.CipherSuite ||

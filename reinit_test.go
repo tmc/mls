@@ -35,15 +35,15 @@ func setup(t *testing.T, cs CipherSuite) (*Client, *Client, *Client, *Group, *Gr
 	return alice, bob, carol, ga, gb, gc
 }
 
-// TestReInit runs the three steps of RFC 9420, Section 11.2: a ReInit
+// TestReinit runs the three steps of RFC 9420, Section 11.2: a Reinit
 // proposal, a commit covering it, and the new group that carries the
 // membership over.
-func TestReInit(t *testing.T) {
+func TestReinit(t *testing.T) {
 	cs := X25519AES128GCMSHA256Ed25519
 	alice, bob, carol, ga, gb, gc := setup(t, cs)
 
-	ri := &ReInit{GroupID: []byte("successor"), Version: Version10, CipherSuite: cs}
-	msg, err := gb.Propose(&Proposal{Type: ProposalTypeReInit, ReInit: ri})
+	ri := &Reinit{GroupID: []byte("successor"), Version: Version10, CipherSuite: cs}
+	msg, err := gb.Propose(&Proposal{Type: ProposalTypeReinit, Reinit: ri})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,20 +65,20 @@ func TestReInit(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, g := range []*Group{ga2, gb2, gc2} {
-		if got := g.ReInit(); got == nil || !bytes.Equal(got.GroupID, ri.GroupID) {
-			t.Fatalf("ReInit = %v, want %v", got, ri)
+		if got := g.Reinit(); got == nil || !bytes.Equal(got.GroupID, ri.GroupID) {
+			t.Fatalf("Reinit = %v, want %v", got, ri)
 		}
 		// The old group is finished.
-		if _, _, _, err := g.Commit(nil); !errors.Is(err, ErrReInitialized) {
-			t.Errorf("Commit = %v, want %v", err, ErrReInitialized)
+		if _, _, _, err := g.Commit(nil); !errors.Is(err, ErrReinitialized) {
+			t.Errorf("Commit = %v, want %v", err, ErrReinitialized)
 		}
-		if _, err := g.Propose(&Proposal{Type: ProposalTypeRemove, Remove: &Remove{Removed: 1}}); !errors.Is(err, ErrReInitialized) {
-			t.Errorf("Propose = %v, want %v", err, ErrReInitialized)
+		if _, err := g.Propose(&Proposal{Type: ProposalTypeRemove, Remove: &Remove{Removed: 1}}); !errors.Is(err, ErrReinitialized) {
+			t.Errorf("Propose = %v, want %v", err, ErrReinitialized)
 		}
 	}
 
 	// Any member may create the successor; here it is Carol, who
-	// did not commit the ReInit. The others fetch new key
+	// did not commit the Reinit. The others fetch new key
 	// packages, since the successor may use a new cipher suite.
 	bob2 := newTestClient(t, cs, "bob")
 	alice2 := newTestClient(t, cs, "alice")
@@ -108,7 +108,7 @@ func TestReInit(t *testing.T) {
 		t.Error("Join accepted a welcome that needs a resumption key")
 	}
 	// Nor does it resume from an epoch that never committed the
-	// ReInit, whose resumption key the welcome does not name.
+	// Reinit, whose resumption key the welcome does not name.
 	if _, err := bob2.Resume(send(t, welcome).Welcome, next.Tree, ga); !errors.Is(err, ErrUnknownPSK) {
 		t.Errorf("Resume = %v, want %v", err, ErrUnknownPSK)
 	}

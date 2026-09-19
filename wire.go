@@ -107,7 +107,7 @@ const (
 	ProposalTypeUpdate                 ProposalType = 2
 	ProposalTypeRemove                 ProposalType = 3
 	ProposalTypePreSharedKey           ProposalType = 4
-	ProposalTypeReInit                 ProposalType = 5
+	ProposalTypeReinit                 ProposalType = 5
 	ProposalTypeExternalInit           ProposalType = 6
 	ProposalTypeGroupContextExtensions ProposalType = 7
 )

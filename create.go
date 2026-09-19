@@ -114,7 +114,7 @@ func (c *Client) NewGroup(groupID []byte, extensions Extensions) (*Group, error)
 // reference.
 func (g *Group) Propose(p *Proposal) (*Message, error) {
 	if g.reinit != nil {
-		return nil, ErrReInitialized
+		return nil, ErrReinitialized
 	}
 	c := &AuthenticatedContent{
 		WireFormat: WireFormatPublicMessage,
@@ -233,7 +233,7 @@ func (g *Group) staged(extra []*Proposal, from Sender) []*AuthenticatedContent {
 // epoch's init secret is reached, and not in anything below that.
 func (g *Group) commit(extra []*Proposal, sender SenderType) (*Group, *Message, *Message, error) {
 	if g.reinit != nil {
-		return nil, nil, nil, ErrReInitialized
+		return nil, nil, nil, ErrReinitialized
 	}
 	cs := g.CipherSuite
 	commit := &Commit{}

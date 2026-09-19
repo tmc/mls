@@ -49,7 +49,7 @@ type ResumptionPSKUsage uint8
 // Resumption PSK usages. See RFC 9420, Section 8.4.
 const (
 	ResumptionPSKUsageApplication ResumptionPSKUsage = 1
-	ResumptionPSKUsageReInit      ResumptionPSKUsage = 2
+	ResumptionPSKUsageReinit      ResumptionPSKUsage = 2
 	ResumptionPSKUsageBranch      ResumptionPSKUsage = 3
 )
 
@@ -117,24 +117,24 @@ type PreSharedKey struct {
 func (p *PreSharedKey) MarshalTLS(w *tlssyntax.Writer)   { p.PSK.MarshalTLS(w) }
 func (p *PreSharedKey) UnmarshalTLS(r *tlssyntax.Reader) { p.PSK.UnmarshalTLS(r) }
 
-// A ReInit proposal asks that the group be torn down and recreated
+// A Reinit proposal asks that the group be torn down and recreated
 // with different parameters. See RFC 9420, Section 12.1.5.
-type ReInit struct {
+type Reinit struct {
 	GroupID     []byte
 	Version     ProtocolVersion
 	CipherSuite CipherSuite
 	Extensions  Extensions
 }
 
-func (ri *ReInit) MarshalTLS(w *tlssyntax.Writer) {
+func (ri *Reinit) MarshalTLS(w *tlssyntax.Writer) {
 	w.WriteOpaque(ri.GroupID)
 	w.WriteUint16(uint16(ri.Version))
 	w.WriteUint16(uint16(ri.CipherSuite))
 	ri.Extensions.MarshalTLS(w)
 }
 
-func (ri *ReInit) UnmarshalTLS(r *tlssyntax.Reader) {
-	*ri = ReInit{}
+func (ri *Reinit) UnmarshalTLS(r *tlssyntax.Reader) {
+	*ri = Reinit{}
 	ri.GroupID = r.ReadOpaque()
 	ri.Version = ProtocolVersion(r.ReadUint16())
 	ri.CipherSuite = CipherSuite(r.ReadUint16())
@@ -168,7 +168,7 @@ type Proposal struct {
 	Update                 *Update
 	Remove                 *Remove
 	PreSharedKey           *PreSharedKey
-	ReInit                 *ReInit
+	Reinit                 *Reinit
 	ExternalInit           *ExternalInit
 	GroupContextExtensions *GroupContextExtensions
 }
@@ -196,9 +196,9 @@ func (p *Proposal) body() interface {
 		if p.PreSharedKey != nil {
 			return p.PreSharedKey
 		}
-	case ProposalTypeReInit:
-		if p.ReInit != nil {
-			return p.ReInit
+	case ProposalTypeReinit:
+		if p.Reinit != nil {
+			return p.Reinit
 		}
 	case ProposalTypeExternalInit:
 		if p.ExternalInit != nil {
@@ -233,8 +233,8 @@ func (p *Proposal) UnmarshalTLS(r *tlssyntax.Reader) {
 		p.Remove = new(Remove)
 	case ProposalTypePreSharedKey:
 		p.PreSharedKey = new(PreSharedKey)
-	case ProposalTypeReInit:
-		p.ReInit = new(ReInit)
+	case ProposalTypeReinit:
+		p.Reinit = new(Reinit)
 	case ProposalTypeExternalInit:
 		p.ExternalInit = new(ExternalInit)
 	case ProposalTypeGroupContextExtensions:

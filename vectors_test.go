@@ -34,7 +34,7 @@ var messageFields = map[string]func() message{
 	"remove_proposal":                   func() message { return new(Remove) },
 	"group_context_extensions_proposal": func() message { return new(GroupContextExtensions) },
 	"pre_shared_key_proposal":           func() message { return new(PreSharedKey) },
-	"re_init_proposal":                  func() message { return new(ReInit) },
+	"re_init_proposal":                  func() message { return new(Reinit) },
 	"external_init_proposal":            func() message { return new(ExternalInit) },
 	"group_secrets":                     func() message { return new(GroupSecrets) },
 	"commit":                            func() message { return new(Commit) },
