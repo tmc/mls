@@ -1,6 +1,10 @@
 package mls
 
-import "github.com/tmc/mls/tlssyntax"
+import (
+	"sync"
+
+	"github.com/tmc/mls/tlssyntax"
+)
 
 // A CredentialType identifies the form of a [Credential].
 type CredentialType uint16
@@ -19,7 +23,10 @@ type CredentialCodec interface {
 	tlssyntax.Unmarshaler
 }
 
-var credentials = map[CredentialType]func() CredentialCodec{}
+var (
+	credentialsMu sync.RWMutex
+	credentials   = map[CredentialType]func() CredentialCodec{}
+)
 
 // RegisterCredential records how to encode and decode the body of a
 // credential of type t; body returns a fresh value to decode into.
@@ -27,13 +34,16 @@ var credentials = map[CredentialType]func() CredentialCodec{}
 // defines itself.
 //
 // Registration is meant to happen from an init function, as
-// [github.com/tmc/mls/multicred] does; it is not safe to register a
-// credential type while credentials are being encoded or decoded.
+// [github.com/tmc/mls/multicred] does, but it is safe to call at any
+// time: the registry is guarded, so a registration cannot race a
+// credential being encoded or decoded.
 func RegisterCredential(t CredentialType, body func() CredentialCodec) {
 	switch t {
 	case CredentialTypeBasic, CredentialTypeX509:
 		panic("mls: cannot register " + t.String())
 	}
+	credentialsMu.Lock()
+	defer credentialsMu.Unlock()
 	if _, ok := credentials[t]; ok {
 		panic("mls: credential type " + t.String() + " is already registered")
 	}
@@ -93,7 +103,9 @@ func (c *Credential) UnmarshalTLS(r *tlssyntax.Reader) {
 			c.Certificates = append(c.Certificates, r.ReadOpaque())
 		})
 	default:
+		credentialsMu.RLock()
 		body, ok := credentials[c.Type]
+		credentialsMu.RUnlock()
 		if !ok {
 			if r.Err() == nil {
 				r.SetError(errUnknown("credential type", uint64(c.Type)))
