@@ -1,6 +1,7 @@
 package mls
 
 import (
+	"iter"
 	"math/bits"
 	"slices"
 
@@ -35,6 +36,21 @@ func (t RatchetTree) Leaf(i LeafIndex) *LeafNode {
 		return n.Leaf
 	}
 	return nil
+}
+
+// Members returns an iterator over the members of the group, in leaf
+// order. Blank leaves are skipped: every leaf the iterator yields is
+// occupied, so callers need no nil check. Ranging over Size and
+// calling [RatchetTree.Leaf] is the form to use when the blanks
+// themselves matter.
+func (t RatchetTree) Members() iter.Seq2[LeafIndex, *LeafNode] {
+	return func(yield func(LeafIndex, *LeafNode) bool) {
+		for i := LeafIndex(0); i < t.Size(); i++ {
+			if n := t.Leaf(i); n != nil && !yield(i, n) {
+				return
+			}
+		}
+	}
 }
 
 // Clone returns a copy of t that shares no state with it. The array
@@ -351,11 +367,7 @@ func (t RatchetTree) parentHashValid(cs CipherSuite, p NodeIndex) (bool, error) 
 // VerifyLeafSignatures checks the signature on every non-blank leaf,
 // binding each to its position in the group.
 func (t RatchetTree) VerifyLeafSignatures(cs CipherSuite, groupID []byte) error {
-	for i := LeafIndex(0); i < t.Size(); i++ {
-		leaf := t.Leaf(i)
-		if leaf == nil {
-			continue
-		}
+	for i, leaf := range t.Members() {
 		if err := leaf.Verify(cs, groupID, i); err != nil {
 			return err
 		}

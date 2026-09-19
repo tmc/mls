@@ -85,8 +85,8 @@ func (c *Client) JoinExternal(info *GroupInfo, tree RatchetTree) (*Group, *MLSMe
 	// prior leaf in the same commit, which RFC 9420, Section
 	// 12.4.3.2 calls a resync. The prior leaf is the one holding
 	// the same signature key.
-	for i := LeafIndex(0); i < tree.Size(); i++ {
-		if l := tree.Leaf(i); l != nil && bytes.Equal(l.SignatureKey, leaf.SignatureKey) {
+	for i, l := range tree.Members() {
+		if bytes.Equal(l.SignatureKey, leaf.SignatureKey) {
 			proposals = append(proposals, &Proposal{Type: ProposalTypeRemove, Remove: &Remove{Removed: uint32(i)}})
 		}
 	}

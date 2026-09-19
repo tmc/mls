@@ -137,11 +137,7 @@ func (c *Client) Resume(w *Welcome, tree RatchetTree, old *Group) (*Group, error
 		// Every leaf of the subgroup must match one of the
 		// original group's, which this package takes to mean
 		// that it presents the same credential.
-		for i := LeafIndex(0); i < g.Tree.Size(); i++ {
-			n := g.Tree.Leaf(i)
-			if n == nil {
-				continue
-			}
+		for _, n := range g.Tree.Members() {
 			if !old.Tree.hasCredential(&n.Credential) {
 				return nil, ErrNotResumed
 			}
@@ -175,11 +171,7 @@ func (t RatchetTree) hasCredential(c *Credential) bool {
 	if err != nil {
 		return false
 	}
-	for i := LeafIndex(0); i < t.Size(); i++ {
-		n := t.Leaf(i)
-		if n == nil {
-			continue
-		}
+	for _, n := range t.Members() {
 		got, err := Marshal(&n.Credential)
 		if err != nil {
 			return false

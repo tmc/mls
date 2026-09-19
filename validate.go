@@ -106,11 +106,7 @@ func (t RatchetTree) validateLeafInGroup(cs CipherSuite, n *LeafNode, i LeafInde
 // validateLeaves checks the leaves of a whole tree, as a client does
 // when it joins a group. See RFC 9420, Section 7.3.
 func (t RatchetTree) validateLeaves(cs CipherSuite, ctx *GroupContext) error {
-	for i := LeafIndex(0); i < t.Size(); i++ {
-		n := t.Leaf(i)
-		if n == nil {
-			continue
-		}
+	for i, n := range t.Members() {
 		if err := t.validateLeafInGroup(cs, n, i, ctx, n.Source); err != nil {
 			return err
 		}
@@ -169,9 +165,8 @@ func (t RatchetTree) validateProposals(ps []proposal, committer LeafIndex, ctx *
 				return fmt.Errorf("%w: two add proposals for the same client", ErrProposalList)
 			}
 			added[key] = true
-			for i := LeafIndex(0); i < t.Size(); i++ {
-				n := t.Leaf(i)
-				if n != nil && string(n.SignatureKey) == key && !removed[i] {
+			for i, n := range t.Members() {
+				if string(n.SignatureKey) == key && !removed[i] {
 					return fmt.Errorf("%w: add proposal for a member of the group", ErrProposalList)
 				}
 			}
@@ -212,11 +207,7 @@ func (t RatchetTree) validateProposals(ps []proposal, committer LeafIndex, ctx *
 			if !ok {
 				break
 			}
-			for i := LeafIndex(0); i < t.Size(); i++ {
-				n := t.Leaf(i)
-				if n == nil {
-					continue
-				}
+			for i, n := range t.Members() {
 				if !req.Supported(&n.Capabilities) {
 					return fmt.Errorf("%w: leaf %d does not meet the required capabilities", ErrProposalList, i)
 				}
