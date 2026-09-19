@@ -37,14 +37,14 @@ func TestExtensionRoundTrip(t *testing.T) {
 	}
 
 	var caps RequiredCapabilities
-	if ok, err := got.Get(ExtensionTypeRequiredCapabilities, &caps); err != nil || !ok {
+	if ok, err := got.Decode(ExtensionTypeRequiredCapabilities, &caps); err != nil || !ok {
 		t.Fatalf("Get required_capabilities = %v, %v", ok, err)
 	}
 	if !slices.Equal(caps.ProposalTypes, want.ProposalTypes) {
 		t.Errorf("proposal types = %v, want %v", caps.ProposalTypes, want.ProposalTypes)
 	}
 	var id ApplicationID
-	if _, err := got.Get(ExtensionTypeApplicationID, &id); err != nil {
+	if _, err := got.Decode(ExtensionTypeApplicationID, &id); err != nil {
 		t.Fatal(err)
 	}
 	if !bytes.Equal(id.ID, []byte("other")) {
@@ -53,7 +53,7 @@ func TestExtensionRoundTrip(t *testing.T) {
 
 	// A missing extension is not an error.
 	var pub ExternalPub
-	if ok, err := got.Get(ExtensionTypeExternalPub, &pub); ok || err != nil {
+	if ok, err := got.Decode(ExtensionTypeExternalPub, &pub); ok || err != nil {
 		t.Errorf("Get external_pub = %v, %v, want false, nil", ok, err)
 	}
 }

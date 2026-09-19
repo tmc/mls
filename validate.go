@@ -78,7 +78,7 @@ func (t RatchetTree) validateLeafInGroup(cs CipherSuite, n *LeafNode, i LeafInde
 		return err
 	}
 	var required RequiredCapabilities
-	if ok, err := ctx.Extensions.Get(ExtensionTypeRequiredCapabilities, &required); err != nil {
+	if ok, err := ctx.Extensions.Decode(ExtensionTypeRequiredCapabilities, &required); err != nil {
 		return err
 	} else if ok && !required.Supported(&n.Capabilities) {
 		return ErrUnsupportedCapability
@@ -200,7 +200,7 @@ func (t RatchetTree) validateProposals(ps []proposal, committer LeafIndex, ctx *
 			// must meet whatever the proposal requires of
 			// them, since nothing else will check them again.
 			var req RequiredCapabilities
-			ok, err := p.GroupContextExtensions.Extensions.Get(ExtensionTypeRequiredCapabilities, &req)
+			ok, err := p.GroupContextExtensions.Extensions.Decode(ExtensionTypeRequiredCapabilities, &req)
 			if err != nil {
 				return err
 			}

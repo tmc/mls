@@ -91,14 +91,14 @@ func (es Extensions) Find(t ExtensionType) *Extension {
 	return nil
 }
 
-// Get decodes the extension of type t into body. It reports whether
+// Decode decodes the extension of type t into body. It reports whether
 // the extension was present; a missing extension is not an error, so
 // that a caller can distinguish absence from a malformed value.
 //
 // Extensions whose type this package does not define keep their
 // contents in [Extension.Data], since RFC 9420, Section 13.4 requires
 // that unrecognized extensions be ignored rather than rejected.
-func (es Extensions) Get(t ExtensionType, body tlssyntax.Unmarshaler) (bool, error) {
+func (es Extensions) Decode(t ExtensionType, body tlssyntax.Unmarshaler) (bool, error) {
 	e := es.Find(t)
 	if e == nil {
 		return false, nil

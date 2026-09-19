@@ -93,7 +93,7 @@ func (c *Client) join(w *Welcome, tree RatchetTree, old *Group) (*Group, error) 
 		return nil, err
 	}
 	var carried RatchetTree
-	if ok, err := info.Extensions.Get(ExtensionTypeRatchetTree, &carried); err != nil {
+	if ok, err := info.Extensions.Decode(ExtensionTypeRatchetTree, &carried); err != nil {
 		return nil, err
 	} else if ok {
 		tree = carried

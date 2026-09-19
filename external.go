@@ -24,7 +24,7 @@ func (c *Client) JoinExternal(info *GroupInfo, tree RatchetTree) (*Group, *Messa
 		return nil, nil, ErrUnsupportedCipherSuite
 	}
 	var carried RatchetTree
-	if ok, err := info.Extensions.Get(ExtensionTypeRatchetTree, &carried); err != nil {
+	if ok, err := info.Extensions.Decode(ExtensionTypeRatchetTree, &carried); err != nil {
 		return nil, nil, err
 	} else if ok {
 		tree = carried
@@ -43,7 +43,7 @@ func (c *Client) JoinExternal(info *GroupInfo, tree RatchetTree) (*Group, *Messa
 		return nil, nil, err
 	}
 	var pub ExternalPub
-	if ok, err := info.Extensions.Get(ExtensionTypeExternalPub, &pub); err != nil {
+	if ok, err := info.Extensions.Decode(ExtensionTypeExternalPub, &pub); err != nil {
 		return nil, nil, err
 	} else if !ok {
 		return nil, nil, ErrNoExternalPub
@@ -184,7 +184,7 @@ func (g *Group) GroupInfo() (*Message, error) {
 // group that may send it proposals. See RFC 9420, Section 12.1.8.1.
 func (g *Group) externalSender(index uint32) (*ExternalSender, error) {
 	var senders ExternalSenders
-	ok, err := g.Context.Extensions.Get(ExtensionTypeExternalSenders, &senders)
+	ok, err := g.Context.Extensions.Decode(ExtensionTypeExternalSenders, &senders)
 	if err != nil {
 		return nil, err
 	}
