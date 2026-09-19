@@ -422,7 +422,7 @@ func (g *Group) welcome(confirmationTag []byte, proposals []proposal, added []Le
 		}
 		secrets := &GroupSecrets{JoinerSecret: g.Schedule.JoinerSecret, PSKs: psks}
 		if secret, ok := g.Secrets.Secrets[commonAncestor(i, g.Index)]; ok {
-			secrets.PathSecret = &PathSecret{PathSecret: secret}
+			secrets.PathSecret = secret
 		}
 		if err := w.AddMember(ref, kp.InitKey, secrets); err != nil {
 			return nil, err

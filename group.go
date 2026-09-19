@@ -143,7 +143,7 @@ func (c *Client) join(w *Welcome, tree RatchetTree, old *Group) (*Group, error) 
 	private := NewTreeSecrets(index, c.EncryptionPriv)
 	if secrets.PathSecret != nil {
 		x := commonAncestor(index, signer)
-		if err := private.SetPath(cs, tree, x, secrets.PathSecret.PathSecret); err != nil {
+		if err := private.SetPath(cs, tree, x, secrets.PathSecret); err != nil {
 			return nil, err
 		}
 	}

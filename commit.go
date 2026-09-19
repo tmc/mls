@@ -89,22 +89,13 @@ func (c *Commit) UnmarshalTLS(r *tlssyntax.Reader) {
 	}
 }
 
-// A PathSecret is the secret for one node on a new member's direct
-// path. See RFC 9420, Section 12.4.3.1.
-type PathSecret struct {
-	PathSecret []byte
-}
-
-func (p *PathSecret) MarshalTLS(w *tlssyntax.Writer)   { w.WriteOpaque(p.PathSecret) }
-func (p *PathSecret) UnmarshalTLS(r *tlssyntax.Reader) { p.PathSecret = r.ReadOpaque() }
-
 // GroupSecrets is the plaintext a joiner recovers from a [Welcome]:
 // enough key material to derive the epoch secrets, plus the path
 // secret for the lowest common ancestor with the committer, if the
 // commit had a path. See RFC 9420, Section 12.4.3.1.
 type GroupSecrets struct {
 	JoinerSecret []byte
-	PathSecret   *PathSecret
+	PathSecret   []byte // nil if the commit carried no path
 	PSKs         []PreSharedKeyID
 }
 
@@ -113,7 +104,7 @@ func (g *GroupSecrets) MarshalTLS(w *tlssyntax.Writer) {
 	if g.PathSecret == nil {
 		w.WriteOptional(nil)
 	} else {
-		w.WriteOptional(g.PathSecret.MarshalTLS)
+		w.WriteOptional(func(w *tlssyntax.Writer) { w.WriteOpaque(g.PathSecret) })
 	}
 	w.WriteVector(func(w *tlssyntax.Writer) {
 		for i := range g.PSKs {
@@ -126,8 +117,7 @@ func (g *GroupSecrets) UnmarshalTLS(r *tlssyntax.Reader) {
 	*g = GroupSecrets{}
 	g.JoinerSecret = r.ReadOpaque()
 	if r.ReadOptional() {
-		g.PathSecret = new(PathSecret)
-		g.PathSecret.UnmarshalTLS(r)
+		g.PathSecret = r.ReadOpaque()
 	}
 	r.ReadAll(func(r *tlssyntax.Reader) {
 		var p PreSharedKeyID
