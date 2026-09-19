@@ -82,12 +82,17 @@
 // attacker measures. On such a CPU prefer a ChaCha20-Poly1305 cipher
 // suite, whose implementation is table-free.
 //
-// Two properties the package does not claim. Secrets live in ordinary
+// One property the package does not claim: secrets live in ordinary
 // Go byte slices and are not zeroed when consumed, so the deletion
 // requirement of RFC 9420, Section 9.2 is met logically but not in
 // memory; Go offers no way to guarantee a wipe survives the
-// optimizer. And [Group.Protect] seals a message at its natural
-// length, so the package does not defend against traffic analysis.
+// optimizer.
+//
+// Against traffic analysis the package offers what RFC 9420, Section
+// 15.1 offers, which is padding: set [Client.Padding] and
+// [Group.Protect] pads each message to a multiple of it. The default
+// of zero pads nothing and puts the exact length of every message on
+// the wire.
 package mls
 
 import "github.com/tmc/mls/tlssyntax"

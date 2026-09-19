@@ -46,11 +46,13 @@ func (m *PublicMessage) AuthenticatedContent(cs CipherSuite, membershipKey []byt
 	return c, nil
 }
 
-// PrivateMessage encrypts c for sending. The sender must be a member,
-// r must be that member's ratchet for c's content type, and padding
-// is the number of zero bytes to append to the plaintext to blur its
-// length. See RFC 9420, Section 6.3.
-func (c *AuthenticatedContent) privateMessage(cs CipherSuite, r *ratchet, senderDataSecret []byte, padding int) (*PrivateMessage, error) {
+// privateMessage encrypts c for sending. The sender must be a member,
+// and r must be that member's ratchet for c's content type. If padTo
+// is greater than one, zero bytes are appended to the plaintext until
+// its length is a multiple of padTo, so that the ciphertext reveals
+// the length of the message only to that granularity.
+// See RFC 9420, Section 6.3.
+func (c *AuthenticatedContent) privateMessage(cs CipherSuite, r *ratchet, senderDataSecret []byte, padTo int) (*PrivateMessage, error) {
 	if c.Content.Sender.Type != SenderTypeMember {
 		return nil, ErrNotMember
 	}
@@ -74,10 +76,14 @@ func (c *AuthenticatedContent) privateMessage(cs CipherSuite, r *ratchet, sender
 		c.Content.marshalBody(w)
 		c.Auth.ContentType = c.Content.ContentType
 		c.Auth.MarshalTLS(w)
-		w.WriteRaw(make([]byte, padding))
 	}))
 	if err != nil {
 		return nil, err
+	}
+	if padTo > 1 {
+		if n := len(plaintext) % padTo; n != 0 {
+			plaintext = append(plaintext, make([]byte, padTo-n)...)
+		}
 	}
 	aead, err := cs.AEAD(key)
 	if err != nil {

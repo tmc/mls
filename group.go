@@ -24,6 +24,14 @@ type Client struct {
 	// group's own history. A nil PSK rejects any commit that needs
 	// an external key.
 	PSK func(id PreSharedKeyID) ([]byte, error)
+
+	// Padding blurs the length of the messages [Group.Protect]
+	// produces: the plaintext is padded with zeros until its length
+	// is a multiple of Padding. Zero or one means no padding, which
+	// puts the exact length of every message on the wire. RFC 9420,
+	// Section 15.1 leaves the policy to the application, since what
+	// it costs and what it hides both depend on the traffic.
+	Padding int
 }
 
 // A Group is a member's view of an MLS group at one epoch. Processing
@@ -299,7 +307,8 @@ func (g *Group) Unprotect(m *Message) (*AuthenticatedContent, error) {
 	return c, nil
 }
 
-// Protect frames application data as a private message of this epoch.
+// Protect frames application data as a private message of this epoch,
+// padded as the client's [Client.Padding] asks.
 func (g *Group) Protect(authenticatedData, plaintext []byte) (*Message, error) {
 	cs := g.CipherSuite
 	c := &AuthenticatedContent{
@@ -321,7 +330,7 @@ func (g *Group) Protect(authenticatedData, plaintext []byte) (*Message, error) {
 	if err != nil {
 		return nil, err
 	}
-	pm, err := c.privateMessage(cs, ratchet, g.schedule.SenderDataSecret, 0)
+	pm, err := c.privateMessage(cs, ratchet, g.schedule.SenderDataSecret, g.client.Padding)
 	if err != nil {
 		return nil, err
 	}

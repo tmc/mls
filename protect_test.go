@@ -5,6 +5,7 @@ package mls
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"testing"
 )
 
@@ -277,5 +278,51 @@ func TestSenderDataGenerationBound(t *testing.T) {
 	m.PrivateMessage.EncryptedSenderData = forged
 	if _, err := a.Unprotect(send(t, m)); err != ErrGenerationJump {
 		t.Errorf("Unprotect = %v, want %v", err, ErrGenerationJump)
+	}
+}
+
+// TestProtectPadding checks that Client.Padding quantizes the length a
+// message puts on the wire, and that a padded message still decrypts.
+func TestProtectPadding(t *testing.T) {
+	for _, pad := range []int{0, 1, 64} {
+		t.Run(fmt.Sprint(pad), func(t *testing.T) {
+			cs := X25519AES128GCMSHA256Ed25519
+			alice := newTestClient(t, cs, "alice")
+			bob := newTestClient(t, cs, "bob")
+			alice.Padding, bob.Padding = pad, pad
+			g, err := alice.NewGroup([]byte("group"), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			g, _, w, err := g.Commit([]*Proposal{{Type: ProposalTypeAdd, Add: &Add{KeyPackage: *bob.KeyPackage}}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			bg, err := bob.Join(send(t, w).Welcome, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			var lens []int
+			for _, n := range []int{1, 17, 60} {
+				plaintext := bytes.Repeat([]byte("x"), n)
+				m, err := g.Protect(nil, plaintext)
+				if err != nil {
+					t.Fatal(err)
+				}
+				lens = append(lens, len(m.PrivateMessage.Ciphertext))
+				got, err := bg.Unprotect(send(t, m))
+				if err != nil {
+					t.Fatalf("Unprotect(%d bytes): %v", n, err)
+				}
+				if !bytes.Equal(got.Content.ApplicationData, plaintext) {
+					t.Errorf("round trip changed the message")
+				}
+			}
+			same := lens[0] == lens[1] && lens[1] == lens[2]
+			if want := pad > 1; same != want {
+				t.Errorf("padding %d: ciphertext lengths %v, want all equal = %v", pad, lens, want)
+			}
+		})
 	}
 }

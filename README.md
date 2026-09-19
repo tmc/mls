@@ -85,11 +85,14 @@ This package has not been audited. It implements RFC 9420 and passes
 the working group's vectors, which is evidence about correctness, not
 about resistance to attack.
 
-Two properties it does not claim: secrets live in ordinary Go byte
+One property it does not claim: secrets live in ordinary Go byte
 slices and are not zeroed when consumed, so RFC 9420 Section 9.2's
-deletion requirement is met logically but not in memory; and the
-package does not defend against traffic analysis, since Group.Protect
-seals a message at its natural length and exposes no padding.
+deletion requirement is met logically but not in memory.
+
+Against traffic analysis the package offers only what RFC 9420 Section
+15.1 offers, which is padding: set Client.Padding and Group.Protect
+pads each message to a multiple of it. The default of zero pads
+nothing and puts the exact length of every message on the wire.
 
 Every operation that touches a private key runs under
 crypto/subtle.WithDataIndependentTiming, which on an arm64 CPU with
