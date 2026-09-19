@@ -58,7 +58,11 @@ func BenchmarkCommit(b *testing.B) {
 }
 
 // BenchmarkHandle measures the receiving side of that commit:
-// validation, one HPKE decryption, and the key schedule.
+// validation, one HPKE decryption, and the key schedule. Every
+// iteration handles the same message from the same epoch, since a
+// Group is immutable and Handle returns a new one; the figure is the
+// cost of a single transition at a fixed tree size, not of a group
+// advancing through epochs.
 func BenchmarkHandle(b *testing.B) {
 	for _, n := range benchSizes {
 		b.Run(fmt.Sprint(n), func(b *testing.B) {
@@ -79,7 +83,9 @@ func BenchmarkHandle(b *testing.B) {
 }
 
 // BenchmarkAdd measures a commit that adds one member and seals the
-// welcome for it.
+// welcome for it. As in BenchmarkHandle the group stays at one epoch
+// and one size, so the figure is the cost of adding the (n+1)th
+// member, not of growing a group from one member to n.
 func BenchmarkAdd(b *testing.B) {
 	cs := X25519AES128GCMSHA256Ed25519
 	for _, n := range benchSizes {
@@ -142,21 +148,41 @@ func BenchmarkProtect(b *testing.B) {
 }
 
 // BenchmarkUnprotect measures the receiving side. Each iteration
-// needs a fresh message, because the ratchet refuses a generation it
-// has already spent, so the reported cost includes one Protect.
+// measures only the receiving side. The ratchet refuses a generation
+// it has already spent, so the messages cannot be reused; they are
+// sealed in batches off the clock instead, and sender and receiver
+// stay in lockstep across batches.
 func BenchmarkUnprotect(b *testing.B) {
 	cs := X25519AES128GCMSHA256Ed25519
 	sender, receiver := benchGroup(b, cs, 8)
 	msg := []byte("the quick brown fox jumps over the lazy dog")
+
+	const batch = 256
+	wire := make([]*Message, batch)
+	fill := func() {
+		for i := range wire {
+			m, err := sender.Protect(nil, msg)
+			if err != nil {
+				b.Fatal(err)
+			}
+			wire[i] = send(b, m)
+		}
+	}
+
+	fill()
+	i := 0
 	b.ReportAllocs()
 	for b.Loop() {
-		m, err := sender.Protect(nil, msg)
-		if err != nil {
+		if i == len(wire) {
+			b.StopTimer()
+			fill()
+			i = 0
+			b.StartTimer()
+		}
+		if _, err := receiver.Unprotect(wire[i]); err != nil {
 			b.Fatal(err)
 		}
-		if _, err := receiver.Unprotect(send(b, m)); err != nil {
-			b.Fatal(err)
-		}
+		i++
 	}
 }
 
