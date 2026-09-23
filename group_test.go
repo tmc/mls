@@ -2,6 +2,7 @@ package mls
 
 import (
 	"bytes"
+	"errors"
 	"testing"
 	"time"
 )
@@ -161,5 +162,45 @@ func testGroup(t *testing.T, cs CipherSuite) {
 	}
 	if _, err := b3.Handle(commit); err != ErrRemoved {
 		t.Errorf("bob handling his own removal: %v, want %v", err, ErrRemoved)
+	}
+}
+
+// A joiner takes the leaf holding its key package's leaf node, not
+// just any leaf with its encryption key. See RFC 9420, Section
+// 12.4.3.1. Here a committer seats Mallory's signature key beside
+// Bob's encryption key and addresses the welcome to Bob.
+func TestJoinOwnLeaf(t *testing.T) {
+	cs := X25519AES128GCMSHA256Ed25519
+	alice := newTestClient(t, cs, "alice")
+	bob := newTestClient(t, cs, "bob")
+	mallory := newTestClient(t, cs, "mallory")
+
+	kp := *mallory.KeyPackage
+	kp.LeafNode.EncryptionKey = bob.KeyPackage.LeafNode.EncryptionKey
+	if err := kp.LeafNode.Sign(cs, mallory.SignaturePriv, nil, 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := kp.Sign(mallory.SignaturePriv); err != nil {
+		t.Fatal(err)
+	}
+	g0, err := alice.NewGroup([]byte("group"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	g1, _, _, err := g0.Commit([]*Proposal{{Type: ProposalTypeAdd, Add: &Add{KeyPackage: kp}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tag, err := cs.ConfirmationTag(g1.schedule.ConfirmationKey, g1.Context.ConfirmedTranscriptHash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	add := &Proposal{Type: ProposalTypeAdd, Add: &Add{KeyPackage: *bob.KeyPackage}}
+	w, err := g1.welcome(tag, []proposal{{Proposal: add}}, []LeafIndex{1}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := bob.Join(send(t, w).Welcome, nil); !errors.Is(err, ErrNotMember) {
+		t.Errorf("Join = %v, want %v", err, ErrNotMember)
 	}
 }

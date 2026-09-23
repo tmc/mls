@@ -143,13 +143,27 @@ func (c *Client) join(w *Welcome, tree RatchetTree, old *Group) (*Group, error) 
 		return nil, err
 	}
 
-	// Our own leaf is the one holding the key package's leaf node.
+	// Our own leaf is the one holding the key package's leaf node,
+	// all of it: a leaf that shares only its encryption key could
+	// carry someone else's signature key or credential.
+	own, err := Marshal(&c.KeyPackage.LeafNode)
+	if err != nil {
+		return nil, err
+	}
 	index := LeafIndex(0)
 	for ; ; index++ {
 		if index >= tree.Size() {
 			return nil, ErrNotMember
 		}
-		if l := tree.Leaf(index); l != nil && bytes.Equal(l.EncryptionKey, c.KeyPackage.LeafNode.EncryptionKey) {
+		l := tree.Leaf(index)
+		if l == nil {
+			continue
+		}
+		b, err := Marshal(l)
+		if err != nil {
+			return nil, err
+		}
+		if bytes.Equal(b, own) {
 			break
 		}
 	}
