@@ -258,6 +258,57 @@ func TestSenderDataDoesNotSpendKeys(t *testing.T) {
 	}
 }
 
+// privateProposal frames p as a PrivateMessage from g's own leaf, as
+// a client that encrypts its handshake messages would send it.
+func privateProposal(t *testing.T, g *Group, p *Proposal) *Message {
+	t.Helper()
+	cs := g.CipherSuite
+	c := &AuthenticatedContent{
+		WireFormat: WireFormatPrivateMessage,
+		Content: FramedContent{
+			GroupID:     g.Context.GroupID,
+			Epoch:       g.Context.Epoch,
+			Sender:      Sender{Type: SenderTypeMember, LeafIndex: uint32(g.Index)},
+			ContentType: ContentTypeProposal,
+			Proposal:    p,
+		},
+	}
+	if err := c.Sign(cs, g.client.SignaturePriv, g.Context.Version, &g.Context); err != nil {
+		t.Fatal(err)
+	}
+	r, err := g.keys.ratchet(g.Index, ContentTypeProposal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pm, err := c.privateMessage(cs, r, g.schedule.SenderDataSecret, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return &Message{Version: g.Context.Version, WireFormat: WireFormatPrivateMessage, PrivateMessage: pm}
+}
+
+// A leaf's application and handshake ratchets grow from one leaf
+// secret. Reading a member's application message must not use up the
+// ratchet its encrypted handshake messages arrive on.
+func TestPrivateHandshakeAfterApplication(t *testing.T) {
+	a, b, c := threeMember(t)
+	m, err := b.Protect(nil, []byte("hello"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.Unprotect(send(t, m)); err != nil {
+		t.Fatalf("Unprotect application message: %v", err)
+	}
+	p := privateProposal(t, b, &Proposal{Type: ProposalTypeRemove, Remove: &Remove{Removed: uint32(c.Index)}})
+	got, err := a.Unprotect(send(t, p))
+	if err != nil {
+		t.Fatalf("Unprotect private proposal: %v", err)
+	}
+	if got.Content.ContentType != ContentTypeProposal {
+		t.Errorf("content type = %v, want %v", got.Content.ContentType, ContentTypeProposal)
+	}
+}
+
 // A generation far ahead of the ratchet costs one derivation per
 // step, so it must be refused rather than walked.
 func TestSenderDataGenerationBound(t *testing.T) {

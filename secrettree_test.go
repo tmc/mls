@@ -47,11 +47,11 @@ func TestSecretTreeVectors(t *testing.T) {
 				t.Errorf("SenderDataKey = %x/%x, want %x/%x", key, nonce, d.Key, d.Nonce)
 			}
 
-			n := LeafIndex(len(vec.Leaves))
-			// Each ratchet may be taken only once, so build a
-			// fresh tree for each content type.
+			// One tree serves both content types: taking a
+			// leaf's application ratchet must not consume its
+			// handshake ratchet.
+			tree := newSecretTree(cs, LeafIndex(len(vec.Leaves)), vec.EncryptionSecret)
 			for _, ct := range []ContentType{ContentTypeApplication, ContentTypeProposal} {
-				tree := newSecretTree(cs, n, vec.EncryptionSecret)
 				for i, steps := range vec.Leaves {
 					leaf := LeafIndex(i)
 					r, err := tree.ratchet(leaf, ct)

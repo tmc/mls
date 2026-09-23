@@ -13,14 +13,13 @@ type secretTree struct {
 	cs       CipherSuite
 	n        LeafIndex
 	secrets  map[NodeIndex][]byte
-	ratchets map[ratchetKey]*ratchet
+	ratchets map[LeafIndex]*leafRatchets
 }
 
-// A ratchetKey identifies one member's ratchet for one kind of
-// message within an epoch.
-type ratchetKey struct {
-	leaf LeafIndex
-	typ  ContentType
+// leafRatchets are the two ratchets a member's leaf secret starts.
+type leafRatchets struct {
+	handshake   ratchet
+	application ratchet
 }
 
 // newSecretTree returns the secret tree for an epoch of a group with
@@ -30,7 +29,7 @@ func newSecretTree(cs CipherSuite, n LeafIndex, encryptionSecret []byte) *secret
 		cs:       cs,
 		n:        n,
 		secrets:  make(map[NodeIndex][]byte),
-		ratchets: make(map[ratchetKey]*ratchet),
+		ratchets: make(map[LeafIndex]*leafRatchets),
 	}
 	t.secrets[root(n)] = encryptionSecret
 	return t
@@ -74,35 +73,44 @@ func (t *secretTree) secret(x NodeIndex) ([]byte, error) {
 // ratchet returns the hash ratchet that protects messages of the
 // given content type sent by the member at leaf. Handshake messages
 // (proposals and commits) and application messages use separate
-// ratchets. The tree keeps each ratchet it derives, so repeated calls
-// return the same one, at whatever generation it has reached.
+// ratchets. Taking a leaf's secret consumes it, so the tree derives
+// both of the leaf's ratchets at once and keeps them; repeated calls
+// return the same ratchet, at whatever generation it has reached.
+// See RFC 9420, Section 9.1.
 func (t *secretTree) ratchet(leaf LeafIndex, typ ContentType) (*ratchet, error) {
-	if r, ok := t.ratchets[ratchetKey{leaf, typ}]; ok {
-		return r, nil
-	}
-	var label string
 	switch typ {
-	case ContentTypeApplication:
-		label = "application"
-	case ContentTypeProposal, ContentTypeCommit:
-		label = "handshake"
+	case ContentTypeApplication, ContentTypeProposal, ContentTypeCommit:
 	default:
 		return nil, errUnknown("content type", uint64(typ))
 	}
 	if leaf >= t.n {
 		return nil, ErrLeafRange
 	}
-	s, err := t.secret(leaf.NodeIndex())
-	if err != nil {
-		return nil, err
+	lr, ok := t.ratchets[leaf]
+	if !ok {
+		s, err := t.secret(leaf.NodeIndex())
+		if err != nil {
+			return nil, err
+		}
+		nh := uint16(t.cs.HashSize())
+		hs, err := t.cs.ExpandWithLabel(s, "handshake", nil, nh)
+		if err != nil {
+			return nil, err
+		}
+		as, err := t.cs.ExpandWithLabel(s, "application", nil, nh)
+		if err != nil {
+			return nil, err
+		}
+		lr = &leafRatchets{
+			handshake:   ratchet{cs: t.cs, secret: hs},
+			application: ratchet{cs: t.cs, secret: as},
+		}
+		t.ratchets[leaf] = lr
 	}
-	secret, err := t.cs.ExpandWithLabel(s, label, nil, uint16(t.cs.HashSize()))
-	if err != nil {
-		return nil, err
+	if typ == ContentTypeApplication {
+		return &lr.application, nil
 	}
-	r := &ratchet{cs: t.cs, secret: secret}
-	t.ratchets[ratchetKey{leaf, typ}] = r
-	return r, nil
+	return &lr.handshake, nil
 }
 
 // A ratchet produces the sequence of single-use keys and nonces that
