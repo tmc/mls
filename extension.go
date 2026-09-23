@@ -160,22 +160,45 @@ func (c *RequiredCapabilities) UnmarshalTLS(r *tlssyntax.Reader) {
 }
 
 // Supported reports whether c lists nothing that caps does not
-// advertise. A member may only be added to a group if its
-// capabilities support the group's required capabilities.
-// See RFC 9420, Section 7.2.
+// support. A member may only be added to a group if its capabilities
+// support the group's required capabilities. The default extension
+// and proposal types are supported without being listed; credential
+// types have no defaults. See RFC 9420, Sections 7.2 and 11.1.
 func (c *RequiredCapabilities) Supported(caps *Capabilities) bool {
-	return subset(c.ExtensionTypes, caps.Extensions) &&
-		subset(c.ProposalTypes, caps.Proposals) &&
-		subset(c.CredentialTypes, caps.Credentials)
-}
-
-func subset[T comparable](want, have []T) bool {
-	for _, v := range want {
-		if !slices.Contains(have, v) {
+	for _, t := range c.ExtensionTypes {
+		if !caps.supportsExtension(t) {
+			return false
+		}
+	}
+	for _, t := range c.ProposalTypes {
+		if !caps.supportsProposal(t) {
+			return false
+		}
+	}
+	for _, t := range c.CredentialTypes {
+		if !slices.Contains(caps.Credentials, t) {
 			return false
 		}
 	}
 	return true
+}
+
+// supportsExtension reports whether caps supports extension type t.
+// Every client supports the default types, application_id through
+// external_senders, which a client must not list.
+// See RFC 9420, Section 7.2.
+func (caps *Capabilities) supportsExtension(t ExtensionType) bool {
+	return ExtensionTypeApplicationID <= t && t <= ExtensionTypeExternalSenders ||
+		slices.Contains(caps.Extensions, t)
+}
+
+// supportsProposal reports whether caps supports proposal type t.
+// Every client supports the default types, add through
+// group_context_extensions, which a client must not list.
+// See RFC 9420, Section 7.2.
+func (caps *Capabilities) supportsProposal(t ProposalType) bool {
+	return ProposalTypeAdd <= t && t <= ProposalTypeGroupContextExtensions ||
+		slices.Contains(caps.Proposals, t)
 }
 
 // An ExternalPub publishes the public half of a group's external init

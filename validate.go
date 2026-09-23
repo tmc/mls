@@ -44,7 +44,7 @@ func (p *KeyPackage) Validate(now time.Time) error {
 
 // validateLeaf checks the rules of RFC 9420, Section 7.3 that a leaf
 // node satisfies on its own: its signature, and that its capabilities
-// cover the extensions and the credential type it uses. The group ID
+// cover the credential type and the non-default extensions it uses. The group ID
 // is empty for a leaf from a key package, whose signature does not
 // cover its position.
 func validateLeaf(cs CipherSuite, n *LeafNode, groupID []byte, i LeafIndex) error {
@@ -55,7 +55,7 @@ func validateLeaf(cs CipherSuite, n *LeafNode, groupID []byte, i LeafIndex) erro
 		return ErrUnsupportedCapability
 	}
 	for _, e := range n.Extensions {
-		if !slices.Contains(n.Capabilities.Extensions, e.Type) {
+		if !n.Capabilities.supportsExtension(e.Type) {
 			return ErrUnsupportedCapability
 		}
 	}

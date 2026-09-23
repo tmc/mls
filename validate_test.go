@@ -31,8 +31,13 @@ func TestValidateKeyPackage(t *testing.T) {
 			p.Signature[0] ^= 1
 		}, ErrBadSignature},
 		{"extension not in capabilities", func(p *KeyPackage) {
-			p.LeafNode.Extensions = Extensions{{Type: ExtensionTypeApplicationID, Data: []byte("x")}}
+			p.LeafNode.Extensions = Extensions{{Type: 0xff00, Data: []byte("x")}}
 		}, ErrUnsupportedCapability},
+		{"default extension not listed", func(p *KeyPackage) {
+			// RFC 9420, Section 7.2: the default extension
+			// types must not be listed, and are supported.
+			p.LeafNode.Extensions = Extensions{{Type: ExtensionTypeApplicationID, Data: []byte("x")}}
+		}, nil},
 		{"credential not in capabilities", func(p *KeyPackage) {
 			p.LeafNode.Capabilities.Credentials = nil
 		}, ErrUnsupportedCapability},
