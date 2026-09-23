@@ -52,7 +52,7 @@ func (cs CipherSuite) ConfirmationTag(confirmationKey, confirmedTranscriptHash [
 	if err != nil {
 		return nil, err
 	}
-	mac := hmac.New(p.newHash, confirmationKey)
+	mac := hmac.New(p.hash.New, confirmationKey)
 	mac.Write(confirmedTranscriptHash)
 	return mac.Sum(nil), nil
 }
@@ -75,7 +75,7 @@ func (cs CipherSuite) MembershipTag(membershipKey []byte, content *Authenticated
 	if err != nil {
 		return nil, err
 	}
-	mac := hmac.New(p.newHash, membershipKey)
+	mac := hmac.New(p.hash.New, membershipKey)
 	mac.Write(b)
 	return mac.Sum(nil), nil
 }

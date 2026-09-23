@@ -11,12 +11,11 @@ import (
 	"crypto/hkdf"
 	"crypto/hpke"
 	"crypto/rand"
-	"crypto/sha256"
-	"crypto/sha512"
+	_ "crypto/sha256" // for crypto.SHA256.New
+	_ "crypto/sha512" // for crypto.SHA384.New and crypto.SHA512.New
 	"crypto/subtle"
 	"errors"
 	"fmt"
-	"hash"
 
 	"github.com/tmc/mls/tlssyntax"
 	"golang.org/x/crypto/chacha20poly1305"
@@ -39,7 +38,6 @@ const (
 // See RFC 9420, Section 17.1.
 type params struct {
 	hash      crypto.Hash
-	newHash   func() hash.Hash
 	curve     ecdh.Curve
 	kdf       func() hpke.KDF
 	aead      func() hpke.AEAD
@@ -55,27 +53,27 @@ type params struct {
 // implement.
 var suiteParams = map[CipherSuite]*params{
 	X25519AES128GCMSHA256Ed25519: {
-		hash: crypto.SHA256, newHash: sha256.New, curve: ecdh.X25519(),
+		hash: crypto.SHA256, curve: ecdh.X25519(),
 		kdf: hpke.HKDFSHA256, aead: hpke.AES128GCM, keySize: 16, nonceSize: 12, kemSize: 32,
 		sig: signatureEd25519,
 	},
 	P256AES128GCMSHA256P256: {
-		hash: crypto.SHA256, newHash: sha256.New, curve: ecdh.P256(),
+		hash: crypto.SHA256, curve: ecdh.P256(),
 		kdf: hpke.HKDFSHA256, aead: hpke.AES128GCM, keySize: 16, nonceSize: 12, kemSize: 32,
 		sig: signatureECDSA, sigCurve: elliptic.P256(),
 	},
 	X25519ChaCha20Poly1305SHA256Ed25519: {
-		hash: crypto.SHA256, newHash: sha256.New, curve: ecdh.X25519(),
+		hash: crypto.SHA256, curve: ecdh.X25519(),
 		kdf: hpke.HKDFSHA256, aead: hpke.ChaCha20Poly1305, keySize: 32, nonceSize: 12, chacha: true, kemSize: 32,
 		sig: signatureEd25519,
 	},
 	P521AES256GCMSHA512P521: {
-		hash: crypto.SHA512, newHash: sha512.New, curve: ecdh.P521(),
+		hash: crypto.SHA512, curve: ecdh.P521(),
 		kdf: hpke.HKDFSHA512, aead: hpke.AES256GCM, keySize: 32, nonceSize: 12, kemSize: 66,
 		sig: signatureECDSA, sigCurve: elliptic.P521(),
 	},
 	P384AES256GCMSHA384P384: {
-		hash: crypto.SHA384, newHash: sha512.New384, curve: ecdh.P384(),
+		hash: crypto.SHA384, curve: ecdh.P384(),
 		kdf: hpke.HKDFSHA384, aead: hpke.AES256GCM, keySize: 32, nonceSize: 12, kemSize: 48,
 		sig: signatureECDSA, sigCurve: elliptic.P384(),
 	},
@@ -108,7 +106,7 @@ func (cs CipherSuite) Hash(data []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	h := p.newHash()
+	h := p.hash.New()
 	h.Write(data)
 	return h.Sum(nil), nil
 }
@@ -133,7 +131,7 @@ func (cs CipherSuite) ExpandWithLabel(secret []byte, label string, context []byt
 	if err != nil {
 		return nil, err
 	}
-	return hkdf.Expand(p.newHash, secret, string(info), int(length))
+	return hkdf.Expand(p.hash.New, secret, string(info), int(length))
 }
 
 // DeriveSecret is ExpandWithLabel with an empty context and an output
@@ -160,7 +158,7 @@ func (cs CipherSuite) Extract(salt, ikm []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	return hkdf.Extract(p.newHash, ikm, salt)
+	return hkdf.Extract(p.hash.New, ikm, salt)
 }
 
 // RefHash computes the labeled hash used to reference key packages
@@ -207,12 +205,12 @@ func (cs CipherSuite) SignWithLabel(priv []byte, label string, content []byte) (
 		})
 		return sig, nil
 	default:
-		h := p.newHash()
+		h := p.hash.New()
 		h.Write(msg)
 		digest := h.Sum(nil)
 		var sig []byte
 		err := withDIT(func() error {
-			key, err := ecdsa.ParseRawPrivateKey(p.sigCurve, padScalar(p.sigCurve, priv))
+			key, err := ecdsa.ParseRawPrivateKey(p.sigCurve, pad(priv, (p.sigCurve.Params().N.BitLen()+7)/8))
 			if err != nil {
 				return err
 			}
@@ -249,7 +247,7 @@ func (cs CipherSuite) VerifyWithLabel(pub SignaturePublicKey, label string, cont
 		if err != nil {
 			return err
 		}
-		h := p.newHash()
+		h := p.hash.New()
 		h.Write(msg)
 		if !ecdsa.VerifyASN1(key, h.Sum(nil), sig) {
 			return ErrBadSignature
@@ -419,19 +417,6 @@ func pad(b []byte, n int) []byte {
 	out := make([]byte, n)
 	copy(out[n-len(b):], b)
 	return out
-}
-
-// padScalar left-pads a private key to the curve's scalar size.
-// Encoders sometimes drop leading zero bytes, which crypto/ecdsa
-// rejects.
-func padScalar(curve elliptic.Curve, priv []byte) []byte {
-	n := (curve.Params().N.BitLen() + 7) / 8
-	if len(priv) >= n {
-		return priv
-	}
-	b := make([]byte, n)
-	copy(b[n-len(priv):], priv)
-	return b
 }
 
 // DeriveKeyPair derives an HPKE key pair from the input keying

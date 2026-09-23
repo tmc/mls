@@ -32,8 +32,8 @@ const (
 
 // String returns the name RFC 9420 gives the cipher suite, or its
 // number if it is not one this package knows.
-func (c CipherSuite) String() string {
-	return enumString("CipherSuite", uint64(c), []string{
+func (cs CipherSuite) String() string {
+	return enumString("CipherSuite", uint64(cs), []string{
 		"reserved",
 		"MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519",
 		"MLS_128_DHKEMP256_AES128GCM_SHA256_P256",
