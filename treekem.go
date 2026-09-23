@@ -164,9 +164,9 @@ func (t *RatchetTree) CreateUpdatePath(cs CipherSuite, i LeafIndex, leafSecret, 
 	// parent hash of the node above it on the filtered direct path,
 	// and the topmost node records none.
 	var hash []byte
-	for k := len(path) - 1; k >= 0; k-- {
-		t.Node(path[k]).Parent.ParentHash = hash
-		if hash, err = t.ParentHash(cs, path[k], copathChild(path[k], i)); err != nil {
+	for _, x := range slices.Backward(path) {
+		t.Node(x).Parent.ParentHash = hash
+		if hash, err = t.ParentHash(cs, x, copathChild(x, i)); err != nil {
 			return nil, nil, nil, err
 		}
 	}
@@ -260,8 +260,8 @@ func (t *RatchetTree) MergeUpdatePath(cs CipherSuite, i LeafIndex, up *UpdatePat
 		}
 	}
 	t.blankPath(i)
-	leaf := up.LeafNode
-	t.set(i.NodeIndex(), &Node{Type: NodeTypeLeaf, Leaf: &leaf})
+	leaf := new(up.LeafNode)
+	t.set(i.NodeIndex(), &Node{Type: NodeTypeLeaf, Leaf: leaf})
 	path := t.FilteredDirectPath(i)
 	if len(path) != len(up.Nodes) {
 		return ErrBadTreeKEM
@@ -270,10 +270,10 @@ func (t *RatchetTree) MergeUpdatePath(cs CipherSuite, i LeafIndex, up *UpdatePat
 		t.set(x, &Node{Type: NodeTypeParent, Parent: &ParentNode{EncryptionKey: up.Nodes[k].EncryptionKey}})
 	}
 	var hash []byte
-	for k := len(path) - 1; k >= 0; k-- {
-		t.Node(path[k]).Parent.ParentHash = hash
+	for _, x := range slices.Backward(path) {
+		t.Node(x).Parent.ParentHash = hash
 		var err error
-		if hash, err = t.ParentHash(cs, path[k], copathChild(path[k], i)); err != nil {
+		if hash, err = t.ParentHash(cs, x, copathChild(x, i)); err != nil {
 			return err
 		}
 	}

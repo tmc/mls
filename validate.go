@@ -83,7 +83,7 @@ func (t RatchetTree) validateLeafInGroup(cs CipherSuite, n *LeafNode, i LeafInde
 	} else if ok && !required.Supported(&n.Capabilities) {
 		return ErrUnsupportedCapability
 	}
-	for j := LeafIndex(0); j < t.Size(); j++ {
+	for j := range t.Size() {
 		other := t.Leaf(j)
 		if other == nil || j == i {
 			continue

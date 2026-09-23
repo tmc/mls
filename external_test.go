@@ -129,7 +129,7 @@ func testJoinExternal(t *testing.T, cs CipherSuite) {
 // members counts the non-blank leaves of a tree.
 func members(t RatchetTree) int {
 	n := 0
-	for i := LeafIndex(0); i < t.Size(); i++ {
+	for i := range t.Size() {
 		if t.Leaf(i) != nil {
 			n++
 		}

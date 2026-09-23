@@ -766,9 +766,9 @@ func (g *Group) apply(proposals []proposal) (*changes, error) {
 			if err := p.Add.KeyPackage.Validate(time.Time{}); err != nil {
 				return nil, err
 			}
-			leaf := p.Add.KeyPackage.LeafNode
-			i := g.Tree.Add(&leaf)
-			if err := g.Tree.validateLeafInGroup(g.CipherSuite, &leaf, i, &g.Context, LeafNodeSourceKeyPackage); err != nil {
+			leaf := new(p.Add.KeyPackage.LeafNode)
+			i := g.Tree.Add(leaf)
+			if err := g.Tree.validateLeafInGroup(g.CipherSuite, leaf, i, &g.Context, LeafNodeSourceKeyPackage); err != nil {
 				return nil, err
 			}
 			ch.added = append(ch.added, i)

@@ -89,7 +89,7 @@ func FuzzRatchetTree(f *testing.F) {
 		cs := X25519AES128GCMSHA256Ed25519
 		_, _ = tree.RootHash(cs)
 		_ = tree.VerifyParentHashes(cs)
-		for i := LeafIndex(0); i < tree.Size() && i < 64; i++ {
+		for i := range min(tree.Size(), 64) {
 			_ = tree.Leaf(i)
 			_ = tree.Resolution(i.NodeIndex())
 		}

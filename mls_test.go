@@ -100,7 +100,7 @@ func TestTruncated(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for n := 0; n < len(full); n++ {
+	for n := range full {
 		if err := Unmarshal(full[:n], new(KeyPackage)); err == nil {
 			t.Errorf("Unmarshal of %d-byte prefix succeeded, want error", n)
 		}

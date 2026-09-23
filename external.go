@@ -81,8 +81,8 @@ func (c *Client) JoinExternal(info *GroupInfo, tree RatchetTree) (*Group, *Messa
 
 	// The joiner takes the leftmost free leaf, as an Add would give
 	// it, and commits a path from there.
-	leaf := c.KeyPackage.LeafNode
-	g.Index = g.Tree.Add(&leaf)
+	leaf := new(c.KeyPackage.LeafNode)
+	g.Index = g.Tree.Add(leaf)
 	g.Secrets = NewTreeSecrets(g.Index, c.EncryptionPriv)
 
 	proposals := []*Proposal{{Type: ProposalTypeExternalInit, ExternalInit: &ExternalInit{KEMOutput: kemOutput}}}

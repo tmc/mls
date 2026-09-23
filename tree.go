@@ -56,7 +56,7 @@ func (t RatchetTree) Leaf(i LeafIndex) *LeafNode {
 // themselves matter.
 func (t RatchetTree) Members() iter.Seq2[LeafIndex, *LeafNode] {
 	return func(yield func(LeafIndex, *LeafNode) bool) {
-		for i := LeafIndex(0); i < t.Size(); i++ {
+		for i := range t.Size() {
 			if n := t.Leaf(i); n != nil && !yield(i, n) {
 				return
 			}
@@ -75,17 +75,15 @@ func (t RatchetTree) Clone() RatchetTree {
 		if n == nil {
 			continue
 		}
-		m := *n
+		m := new(*n)
 		if n.Leaf != nil {
-			leaf := *n.Leaf
-			m.Leaf = &leaf
+			m.Leaf = new(*n.Leaf)
 		}
 		if n.Parent != nil {
-			parent := *n.Parent
-			parent.UnmergedLeaves = slices.Clone(n.Parent.UnmergedLeaves)
-			m.Parent = &parent
+			m.Parent = new(*n.Parent)
+			m.Parent.UnmergedLeaves = slices.Clone(n.Parent.UnmergedLeaves)
 		}
-		c[i] = &m
+		c[i] = m
 	}
 	return c
 }
@@ -274,7 +272,7 @@ func (t RatchetTree) verifyShape() error {
 // there to prevent. See RFC 9420, Sections 12.4 and 12.4.3.1.
 func (t RatchetTree) verifyNodeKeys() error {
 	seen := make(map[string]NodeIndex, len(t))
-	for x := NodeIndex(0); int(x) < len(t); x++ {
+	for x := range NodeIndex(len(t)) {
 		var key []byte
 		switch n := t.Node(x); {
 		case n == nil:

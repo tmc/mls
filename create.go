@@ -68,8 +68,7 @@ func NewClient(cs CipherSuite, cred Credential, lifetime time.Duration) (*Client
 // epoch to derive it from. See RFC 9420, Section 11.
 func (c *Client) NewGroup(groupID []byte, extensions Extensions) (*Group, error) {
 	cs := c.CipherSuite
-	leaf := c.KeyPackage.LeafNode
-	tree := RatchetTree{{Type: NodeTypeLeaf, Leaf: &leaf}}
+	tree := RatchetTree{{Type: NodeTypeLeaf, Leaf: new(c.KeyPackage.LeafNode)}}
 	root, err := tree.RootHash(cs)
 	if err != nil {
 		return nil, err
@@ -373,9 +372,9 @@ func (g *Group) commit(extra []*Proposal, sender SenderType) (*Group, *Message, 
 	// moves into the leftmost free leaf as the members will place
 	// it when they apply the commit.
 	if sender == SenderTypeNewMemberCommit {
-		leaf := *next.Tree.Leaf(g.Index)
+		leaf := new(*next.Tree.Leaf(g.Index))
 		next.Tree.Remove(g.Index)
-		next.Index = next.Tree.Add(&leaf)
+		next.Index = next.Tree.Add(leaf)
 		next.Secrets = NewTreeSecrets(next.Index, g.Secrets.Leaf)
 	}
 	next.Context.Epoch = g.Context.Epoch + 1

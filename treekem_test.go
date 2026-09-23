@@ -5,6 +5,7 @@ package mls
 import (
 	"bytes"
 	"fmt"
+	"maps"
 	"slices"
 	"testing"
 
@@ -99,7 +100,7 @@ func testTreeKEM(t *testing.T, vec *treeKEMVector) {
 
 	members := func(except LeafIndex) []LeafIndex {
 		var out []LeafIndex
-		for j := LeafIndex(0); j < tree.Size(); j++ {
+		for j := range tree.Size() {
 			if j != except && tree.Leaf(j) != nil && secrets[j] != nil {
 				out = append(out, j)
 			}
@@ -110,9 +111,7 @@ func testTreeKEM(t *testing.T, vec *treeKEMVector) {
 	private := func(j LeafIndex) *TreeSecrets {
 		s := secrets[j]
 		c := NewTreeSecrets(s.Index, s.Leaf)
-		for x, v := range s.Secrets {
-			c.Secrets[x] = v
-		}
+		maps.Copy(c.Secrets, s.Secrets)
 		return c
 	}
 

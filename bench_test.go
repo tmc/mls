@@ -233,8 +233,7 @@ func benchTree(b *testing.B, cs CipherSuite, n int) RatchetTree {
 	c := newTestClient(b, cs, "member")
 	var tr RatchetTree
 	for range n {
-		leaf := c.KeyPackage.LeafNode
-		tr.Add(&leaf)
+		tr.Add(new(c.KeyPackage.LeafNode))
 	}
 	ctx := &GroupContext{Version: Version10, CipherSuite: cs, GroupID: []byte("group")}
 	secret := make([]byte, cs.HashSize())
