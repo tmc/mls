@@ -299,6 +299,14 @@ func (t RatchetTree) DecryptPathSecrets(cs CipherSuite, i LeafIndex, up *UpdateP
 	if len(path) != len(up.Nodes) {
 		return nil, ErrBadTreeKEM
 	}
+	// Every node carries one ciphertext for each node in the
+	// resolution of its copath child, not only the node s reads.
+	// See RFC 9420, Sections 7.6 and 12.4.2.
+	for k, x := range path {
+		if len(t.resolutionExcluding(copathChild(x, i), exclude)) != len(up.Nodes[k].EncryptedPathSecret) {
+			return nil, ErrBadTreeKEM
+		}
+	}
 	ctxBytes, err := t.provisionalContext(cs, ctx)
 	if err != nil {
 		return nil, err
@@ -310,11 +318,7 @@ func (t RatchetTree) DecryptPathSecrets(cs CipherSuite, i LeafIndex, up *UpdateP
 		if !contains(c, s.Index) {
 			continue
 		}
-		res := t.resolutionExcluding(c, exclude)
-		if len(res) != len(up.Nodes[k].EncryptedPathSecret) {
-			return nil, ErrBadTreeKEM
-		}
-		for n, y := range res {
+		for n, y := range t.resolutionExcluding(c, exclude) {
 			priv, err := s.PrivateKey(cs, y)
 			if err != nil {
 				return nil, err

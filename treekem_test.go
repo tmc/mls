@@ -223,3 +223,50 @@ func TestMergeUpdatePathReusedKey(t *testing.T) {
 		})
 	}
 }
+
+// Every node of an update path must carry one ciphertext per node in
+// the resolution of its copath child, including the nodes a receiver
+// does not decrypt. See RFC 9420, Sections 7.6 and 12.4.2.
+func TestDecryptPathSecretsCount(t *testing.T) {
+	a1, b1, _ := threeMember(t)
+	cs := a1.CipherSuite
+	_, msg, _, err := a1.Commit(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := msg.PublicMessage.Content.Commit.Path
+	ctx := b1.Context
+	ctx.Epoch++
+	tr := b1.Tree.Clone()
+	if err := tr.MergeUpdatePath(cs, a1.Index, path); err != nil {
+		t.Fatal(err)
+	}
+	// Bob decrypts at the first node; the last is for carol.
+	if len(path.Nodes) != 2 {
+		t.Fatalf("path has %d nodes, want 2", len(path.Nodes))
+	}
+	last := len(path.Nodes) - 1
+	for _, tt := range []struct {
+		name string
+		mung func(*UpdatePath)
+		want error
+	}{
+		{"as sent", func(*UpdatePath) {}, nil},
+		{"extra ciphertext", func(up *UpdatePath) {
+			up.Nodes[last].EncryptedPathSecret = append(up.Nodes[last].EncryptedPathSecret, up.Nodes[last].EncryptedPathSecret[0])
+		}, ErrBadTreeKEM},
+		{"missing ciphertext", func(up *UpdatePath) {
+			up.Nodes[last].EncryptedPathSecret = nil
+		}, ErrBadTreeKEM},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			up := *path
+			up.Nodes = slices.Clone(path.Nodes)
+			tt.mung(&up)
+			s := NewTreeSecrets(b1.Index, b1.Secrets.Leaf)
+			if _, err := tr.DecryptPathSecrets(cs, a1.Index, &up, &ctx, s, nil); err != tt.want {
+				t.Errorf("DecryptPathSecrets = %v, want %v", err, tt.want)
+			}
+		})
+	}
+}
