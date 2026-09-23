@@ -112,11 +112,19 @@ func (ks *keySchedule) ExternalPub() (HPKEPublicKey, error) {
 	if err != nil {
 		return nil, err
 	}
-	priv, err := hpke.DHKEM(p.curve).DeriveKeyPair(ks.ExternalSecret)
+	var pub HPKEPublicKey
+	err = withDIT(func() error {
+		key, err := hpke.DHKEM(p.curve).DeriveKeyPair(ks.ExternalSecret)
+		if err != nil {
+			return err
+		}
+		pub = key.PublicKey().Bytes()
+		return nil
+	})
 	if err != nil {
 		return nil, err
 	}
-	return priv.PublicKey().Bytes(), nil
+	return pub, nil
 }
 
 // Export implements MLS-Exporter: it derives an application secret
@@ -193,13 +201,21 @@ func (ks *keySchedule) ExternalInit(kemOutput []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	key, err := hpke.DHKEM(p.curve).DeriveKeyPair(ks.ExternalSecret)
+	var secret []byte
+	err = withDIT(func() error {
+		key, err := hpke.DHKEM(p.curve).DeriveKeyPair(ks.ExternalSecret)
+		if err != nil {
+			return err
+		}
+		r, err := hpke.NewRecipient(kemOutput, key, p.kdf(), p.aead(), nil)
+		if err != nil {
+			return err
+		}
+		secret, err = r.Export(externalInitLabel, cs.HashSize())
+		return err
+	})
 	if err != nil {
 		return nil, err
 	}
-	r, err := hpke.NewRecipient(kemOutput, key, p.kdf(), p.aead(), nil)
-	if err != nil {
-		return nil, err
-	}
-	return r.Export(externalInitLabel, cs.HashSize())
+	return secret, nil
 }

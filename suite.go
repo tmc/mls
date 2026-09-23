@@ -486,28 +486,31 @@ func (cs CipherSuite) GenerateSignatureKeyPair() (priv []byte, pub SignaturePubl
 	if err != nil {
 		return nil, nil, err
 	}
-	switch p.sig {
-	case signatureEd25519:
-		pub, priv, err := ed25519.GenerateKey(rand.Reader)
-		if err != nil {
-			return nil, nil, err
+	err = withDIT(func() error {
+		switch p.sig {
+		case signatureEd25519:
+			edPub, edPriv, err := ed25519.GenerateKey(rand.Reader)
+			if err != nil {
+				return err
+			}
+			priv, pub = edPriv.Seed(), SignaturePublicKey(edPub)
+			return nil
+		default:
+			key, err := ecdsa.GenerateKey(p.sigCurve, rand.Reader)
+			if err != nil {
+				return err
+			}
+			if priv, err = key.Bytes(); err != nil {
+				return err
+			}
+			pub, err = key.PublicKey.Bytes()
+			return err
 		}
-		return priv.Seed(), SignaturePublicKey(pub), nil
-	default:
-		key, err := ecdsa.GenerateKey(p.sigCurve, rand.Reader)
-		if err != nil {
-			return nil, nil, err
-		}
-		priv, err := key.Bytes()
-		if err != nil {
-			return nil, nil, err
-		}
-		pub, err := key.PublicKey.Bytes()
-		if err != nil {
-			return nil, nil, err
-		}
-		return priv, pub, nil
+	})
+	if err != nil {
+		return nil, nil, err
 	}
+	return priv, pub, nil
 }
 
 // PublicKey returns the HPKE public key matching the private key
