@@ -17,6 +17,8 @@
 package multicred
 
 import (
+	"fmt"
+
 	"github.com/tmc/mls"
 	"github.com/tmc/mls/tlssyntax"
 )
@@ -43,6 +45,12 @@ func init() {
 // the signature that binds it to a leaf node's signature key. The
 // cipher suite is the binding's own and need not be the group's.
 // See draft-ietf-mls-extensions, Section 6.5.
+//
+// The credential of a binding may not itself be a multi-credential.
+// The draft does not forbid one, but it describes no use for it, and
+// each level of nesting is another level of recursion in the decoder,
+// so that a key package of a few megabytes could exhaust the stack.
+// Encoding, decoding and verifying all reject it with [ErrNested].
 type Binding struct {
 	CipherSuite   mls.CipherSuite
 	Credential    mls.Credential
@@ -51,6 +59,10 @@ type Binding struct {
 }
 
 func (b *Binding) MarshalTLS(w *tlssyntax.Writer) {
+	if isMulti(b.Credential.Type) {
+		w.SetError(ErrNested)
+		return
+	}
 	b.marshalTBS(w, nil)
 	w.WriteOpaque(b.Signature)
 }
@@ -70,9 +82,21 @@ func (b *Binding) marshalTBS(w *tlssyntax.Writer, signatureKey mls.SignaturePubl
 func (b *Binding) UnmarshalTLS(r *tlssyntax.Reader) {
 	*b = Binding{}
 	b.CipherSuite = mls.CipherSuite(r.ReadUint16())
+	// Look at the credential type before decoding the credential,
+	// so that nesting is refused before it can recurse.
+	peek := *r
+	if isMulti(mls.CredentialType(peek.ReadUint16())) {
+		r.SetError(fmt.Errorf("%w: %w", tlssyntax.ErrMalformed, ErrNested))
+		return
+	}
 	b.Credential.UnmarshalTLS(r)
 	b.CredentialKey = r.ReadOpaque()
 	b.Signature = r.ReadOpaque()
+}
+
+// isMulti reports whether t is one of the multi-credential types.
+func isMulti(t mls.CredentialType) bool {
+	return t == TypeMulti || t == TypeWeakMulti
 }
 
 // SignedContent returns the CredentialBindingTBS bytes that
@@ -154,6 +178,9 @@ func (c *Credential) Verify(signatureKey mls.SignaturePublicKey, supported func(
 	}
 	for i := range c.Bindings {
 		b := &c.Bindings[i]
+		if isMulti(b.Credential.Type) {
+			return ErrNested
+		}
 		if supported != nil && !supported(b) {
 			continue
 		}
