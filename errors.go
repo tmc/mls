@@ -214,3 +214,8 @@ var ErrExternalProposal = errors.New("mls: proposal from outside the group not a
 // ErrTooManyProposals is reported for a proposal that would take the
 // number a group remembers in one epoch past the limit.
 var ErrTooManyProposals = errors.New("mls: too many proposals in one epoch")
+
+// ErrSameGroupID is reported by [Group.Branch] for a new group given
+// the group ID of the group it branches from, which RFC 9420, Section
+// 11.3 does not allow.
+var ErrSameGroupID = errors.New("mls: new group has the group id of the old one")

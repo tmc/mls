@@ -53,13 +53,16 @@ func (g *Group) Reinitialize(members []*KeyPackage) (*Group, *Message, error) {
 }
 
 // Branch creates a new group holding a subset of g's members, with
-// the same parameters as g, as RFC 9420, Section 11.3 describes.
-// members are the key packages of the subgroup's members, which the
-// caller fetches afresh; g's own member is the creator and needs
-// none. It returns the new group at epoch 1 and the welcome message
-// for the others.
-func (g *Group) Branch(members []*KeyPackage) (*Group, *Message, error) {
-	return g.resume(g.Context.GroupID, g.CipherSuite, g.Context.Extensions, ResumptionPSKUsageBranch, members)
+// the same parameters as g but a new group ID, as RFC 9420, Section
+// 11.3 describes. members are the key packages of the subgroup's
+// members, which the caller fetches afresh; g's own member is the
+// creator and needs none. It returns the new group at epoch 1 and the
+// welcome message for the others.
+func (g *Group) Branch(groupID []byte, members []*KeyPackage) (*Group, *Message, error) {
+	if bytes.Equal(groupID, g.Context.GroupID) {
+		return nil, nil, ErrSameGroupID
+	}
+	return g.resume(groupID, g.CipherSuite, g.Context.Extensions, ResumptionPSKUsageBranch, members)
 }
 
 // resume creates a new group linked to g by a resumption pre-shared
@@ -106,8 +109,9 @@ func (g *Group) resume(groupID []byte, cs CipherSuite, extensions Extensions, us
 // resumption pre-shared key drawn from old, and in the checks RFC
 // 9420, Sections 11.2 and 11.3 require of the new group: it must be
 // at epoch 1, it must match the parameters of the group it resumes,
-// and, for a branch, every member of it must already be a member of
-// old.
+// a reinitialized group must be resumed from the epoch that committed
+// the Reinit, and a branch must have a new group ID and hold only
+// members of old.
 func (c *Client) Resume(w *Welcome, tree RatchetTree, old *Group) (*Group, error) {
 	g, err := c.join(w, tree, old)
 	if err != nil {
@@ -124,6 +128,7 @@ func (c *Client) Resume(w *Welcome, tree RatchetTree, old *Group) (*Group, error
 	case ResumptionPSKUsageReinit:
 		ri := old.Reinit()
 		if ri == nil ||
+			psk.PSKEpoch != old.Context.Epoch ||
 			ri.Version != g.Context.Version ||
 			ri.CipherSuite != g.CipherSuite ||
 			!bytes.Equal(ri.GroupID, g.Context.GroupID) ||
@@ -131,7 +136,8 @@ func (c *Client) Resume(w *Welcome, tree RatchetTree, old *Group) (*Group, error
 			return nil, ErrNotResumed
 		}
 	case ResumptionPSKUsageBranch:
-		if g.Context.Version != old.Context.Version || g.CipherSuite != old.CipherSuite {
+		if g.Context.Version != old.Context.Version || g.CipherSuite != old.CipherSuite ||
+			bytes.Equal(g.Context.GroupID, old.Context.GroupID) {
 			return nil, ErrNotResumed
 		}
 		// Every leaf of the subgroup must match one of the

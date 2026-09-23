@@ -110,6 +110,17 @@ func (c *Client) join(w *Welcome, tree RatchetTree, old *Group) (*Group, error) 
 	if err != nil {
 		return nil, err
 	}
+	// At most one pre-shared key links the group to one it
+	// reinitializes or branches. See RFC 9420, Section 12.4.3.1.
+	var resumed *PreSharedKeyID
+	for i := range secrets.PSKs {
+		if id := &secrets.PSKs[i]; id.Type == PSKTypeResumption && id.Usage != ResumptionPSKUsageApplication {
+			if resumed != nil {
+				return nil, ErrNotResumed
+			}
+			resumed = id
+		}
+	}
 	pskSecret, err := c.pskSecret(secrets.PSKs, old)
 	if err != nil {
 		return nil, err
@@ -217,11 +228,7 @@ func (c *Client) join(w *Welcome, tree RatchetTree, old *Group) (*Group, error) 
 		updates:     make(map[string][]byte),
 		resumption:  map[uint64][]byte{info.GroupContext.Epoch: schedule.ResumptionPSK},
 		prior:       old,
-	}
-	for i := range secrets.PSKs {
-		if id := secrets.PSKs[i]; id.Type == PSKTypeResumption && id.Usage != ResumptionPSKUsageApplication {
-			g.resumed = &secrets.PSKs[i]
-		}
+		resumed:     resumed,
 	}
 	return g, nil
 }

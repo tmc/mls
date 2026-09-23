@@ -124,7 +124,7 @@ func TestBranch(t *testing.T) {
 	_, bob, _, ga, _, _ := setup(t, cs)
 
 	bob2 := newTestClient(t, cs, "bob")
-	sub, welcome, err := ga.Branch([]*KeyPackage{bob2.KeyPackage})
+	sub, welcome, err := ga.Branch([]byte("subgroup"), []*KeyPackage{bob2.KeyPackage})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -145,7 +145,7 @@ func TestBranch(t *testing.T) {
 	// A client that was not in the original group cannot be
 	// branched into the subgroup.
 	dave := newTestClient(t, cs, "dave")
-	sub, welcome, err = ga.Branch([]*KeyPackage{dave.KeyPackage})
+	sub, welcome, err = ga.Branch([]byte("subgroup"), []*KeyPackage{dave.KeyPackage})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -153,4 +153,76 @@ func TestBranch(t *testing.T) {
 		t.Errorf("Resume = %v, want %v", err, ErrNotResumed)
 	}
 	_ = bob
+}
+
+// A branch is a new group and needs a new group ID. See RFC 9420,
+// Section 11.3.
+func TestBranchGroupID(t *testing.T) {
+	cs := X25519AES128GCMSHA256Ed25519
+	_, _, _, ga, _, _ := setup(t, cs)
+	bob2 := newTestClient(t, cs, "bob")
+	if _, _, err := ga.Branch(ga.Context.GroupID, []*KeyPackage{bob2.KeyPackage}); !errors.Is(err, ErrSameGroupID) {
+		t.Errorf("Branch = %v, want %v", err, ErrSameGroupID)
+	}
+}
+
+// A reinitialized group is resumed from the epoch that committed the
+// Reinit, not from an earlier one whose resumption key a member also
+// holds.
+func TestResumeReinitEpoch(t *testing.T) {
+	cs := X25519AES128GCMSHA256Ed25519
+	_, _, _, ga, gb, _ := setup(t, cs)
+	ri := &Reinit{GroupID: []byte("successor"), Version: Version10, CipherSuite: cs}
+	ga2, commit, _, err := ga.Commit([]*Proposal{{Type: ProposalTypeReinit, Reinit: ri}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	gb2, err := gb.Handle(send(t, commit))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Alice builds the new group from the epoch before, whose
+	// resumption key gb2 still holds.
+	early := *ga2
+	early.Context.Epoch--
+	bob2 := newTestClient(t, cs, "bob")
+	next, welcome, err := early.Reinitialize([]*KeyPackage{bob2.KeyPackage})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := bob2.Resume(send(t, welcome).Welcome, next.Tree, gb2); !errors.Is(err, ErrNotResumed) {
+		t.Errorf("Resume = %v, want %v", err, ErrNotResumed)
+	}
+}
+
+// A welcome links the new group to at most one old one. See RFC 9420,
+// Section 12.4.3.1.
+func TestResumeTwoPSKs(t *testing.T) {
+	cs := X25519AES128GCMSHA256Ed25519
+	alice, _, _, ga, _, _ := setup(t, cs)
+	branch := func(nonce byte) *Proposal {
+		id := PreSharedKeyID{
+			Type:       PSKTypeResumption,
+			Usage:      ResumptionPSKUsageBranch,
+			PSKGroupID: ga.Context.GroupID,
+			PSKEpoch:   ga.Context.Epoch,
+			PSKNonce:   make([]byte, cs.HashSize()),
+		}
+		id.PSKNonce[0] = nonce
+		return &Proposal{Type: ProposalTypePreSharedKey, PreSharedKey: &PreSharedKey{PSK: id}}
+	}
+	sub, err := alice.NewGroup([]byte("subgroup"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sub.prior = ga
+	bob2 := newTestClient(t, cs, "bob")
+	add := &Proposal{Type: ProposalTypeAdd, Add: &Add{KeyPackage: *bob2.KeyPackage}}
+	next, _, welcome, err := sub.Commit([]*Proposal{branch(1), branch(2), add})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := bob2.Resume(send(t, welcome).Welcome, next.Tree, ga); !errors.Is(err, ErrNotResumed) {
+		t.Errorf("Resume = %v, want %v", err, ErrNotResumed)
+	}
 }
