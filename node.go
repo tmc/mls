@@ -129,9 +129,7 @@ func (n *LeafNode) UnmarshalTLS(r *tlssyntax.Reader) {
 	case LeafNodeSourceCommit:
 		n.ParentHash = r.ReadOpaque()
 	default:
-		if r.Err() == nil {
-			r.SetError(errUnknown("leaf node source", uint64(n.Source)))
-		}
+		r.SetError(errUnknown("leaf node source", uint64(n.Source)))
 		return
 	}
 	n.Extensions.UnmarshalTLS(r)
@@ -198,9 +196,7 @@ func (n *Node) UnmarshalTLS(r *tlssyntax.Reader) {
 		n.Parent = new(ParentNode)
 		n.Parent.UnmarshalTLS(r)
 	default:
-		if r.Err() == nil {
-			r.SetError(errUnknown("node type", uint64(n.Type)))
-		}
+		r.SetError(errUnknown("node type", uint64(n.Type)))
 	}
 }
 

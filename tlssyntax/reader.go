@@ -193,9 +193,7 @@ func (r *Reader) ReadOptional() bool {
 	case 1:
 		return true
 	}
-	if r.Err() == nil {
-		r.failf("tlssyntax: malformed optional presence octet")
-	}
+	r.failf("tlssyntax: malformed optional presence octet")
 	return false
 }
 
@@ -208,7 +206,7 @@ func (r *Reader) ReadAll(read func(r *Reader)) {
 	for !v.Empty() {
 		n := v.Len()
 		read(v)
-		if v.Len() == n && v.Err() == nil {
+		if v.Len() == n {
 			v.failf("tlssyntax: vector element consumed no input")
 		}
 	}

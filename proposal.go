@@ -100,9 +100,7 @@ func (p *PreSharedKeyID) UnmarshalTLS(r *tlssyntax.Reader) {
 		p.PSKGroupID = r.ReadOpaque()
 		p.PSKEpoch = r.ReadUint64()
 	default:
-		if r.Err() == nil {
-			r.SetError(errUnknown("psk type", uint64(p.Type)))
-		}
+		r.SetError(errUnknown("psk type", uint64(p.Type)))
 		return
 	}
 	p.PSKNonce = r.ReadOpaque()
@@ -240,9 +238,7 @@ func (p *Proposal) UnmarshalTLS(r *tlssyntax.Reader) {
 	case ProposalTypeGroupContextExtensions:
 		p.GroupContextExtensions = new(GroupContextExtensions)
 	default:
-		if r.Err() == nil {
-			r.SetError(errUnknown("proposal type", uint64(p.Type)))
-		}
+		r.SetError(errUnknown("proposal type", uint64(p.Type)))
 		return
 	}
 	p.body().UnmarshalTLS(r)
@@ -295,8 +291,6 @@ func (p *ProposalOrRef) UnmarshalTLS(r *tlssyntax.Reader) {
 	case ProposalOrRefTypeReference:
 		p.Reference = r.ReadOpaque()
 	default:
-		if r.Err() == nil {
-			r.SetError(errUnknown("proposal-or-ref type", uint64(p.Type)))
-		}
+		r.SetError(errUnknown("proposal-or-ref type", uint64(p.Type)))
 	}
 }

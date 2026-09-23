@@ -57,9 +57,7 @@ func (m *Message) UnmarshalTLS(r *tlssyntax.Reader) {
 		m.KeyPackage = new(KeyPackage)
 		m.KeyPackage.UnmarshalTLS(r)
 	default:
-		if r.Err() == nil {
-			r.SetError(errUnknown("wire format", uint64(m.WireFormat)))
-		}
+		r.SetError(errUnknown("wire format", uint64(m.WireFormat)))
 	}
 }
 

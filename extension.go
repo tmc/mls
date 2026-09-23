@@ -73,7 +73,7 @@ func (es *Extensions) UnmarshalTLS(r *tlssyntax.Reader) {
 		// RFC 9420, Section 13.4: a list of extensions must not
 		// hold more than one extension of any given type. The
 		// order of the list is not constrained.
-		if es.Find(e.Type) != nil && r.Err() == nil {
+		if es.Find(e.Type) != nil {
 			r.SetError(fmt.Errorf("%w: %v", ErrDuplicateExtension, e.Type))
 			return
 		}

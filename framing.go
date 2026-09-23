@@ -35,9 +35,7 @@ func (s *Sender) UnmarshalTLS(r *tlssyntax.Reader) {
 	case SenderTypeNewMemberProposal, SenderTypeNewMemberCommit:
 		// no fields
 	default:
-		if r.Err() == nil {
-			r.SetError(errUnknown("sender type", uint64(s.Type)))
-		}
+		r.SetError(errUnknown("sender type", uint64(s.Type)))
 	}
 }
 
@@ -102,9 +100,7 @@ func (c *FramedContent) unmarshalBody(r *tlssyntax.Reader) {
 		c.Commit = new(Commit)
 		c.Commit.UnmarshalTLS(r)
 	default:
-		if r.Err() == nil {
-			r.SetError(errUnknown("content type", uint64(c.ContentType)))
-		}
+		r.SetError(errUnknown("content type", uint64(c.ContentType)))
 	}
 }
 
@@ -142,9 +138,7 @@ func (a *FramedContentAuthData) UnmarshalTLS(r *tlssyntax.Reader) {
 	case ContentTypeApplication, ContentTypeProposal:
 		// no fields
 	default:
-		if r.Err() == nil {
-			r.SetError(errUnknown("content type", uint64(ct)))
-		}
+		r.SetError(errUnknown("content type", uint64(ct)))
 	}
 }
 

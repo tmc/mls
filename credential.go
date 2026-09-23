@@ -107,9 +107,7 @@ func (c *Credential) UnmarshalTLS(r *tlssyntax.Reader) {
 		body, ok := credentials[c.Type]
 		credentialsMu.RUnlock()
 		if !ok {
-			if r.Err() == nil {
-				r.SetError(errUnknown("credential type", uint64(c.Type)))
-			}
+			r.SetError(errUnknown("credential type", uint64(c.Type)))
 			return
 		}
 		c.Body = body()
