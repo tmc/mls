@@ -204,3 +204,51 @@ func TestJoinOwnLeaf(t *testing.T) {
 		t.Errorf("Join = %v, want %v", err, ErrNotMember)
 	}
 }
+
+// A joiner checks that the group it joins runs the version and cipher
+// suite it expects: the welcome's cipher suite covers only the
+// welcome itself.
+func TestJoinGroupContext(t *testing.T) {
+	cs := X25519AES128GCMSHA256Ed25519
+	tests := []struct {
+		name   string
+		mutate func(*GroupContext)
+		want   error
+	}{
+		{"cipher suite", func(c *GroupContext) { c.CipherSuite = P256AES128GCMSHA256P256 }, ErrUnsupportedCipherSuite},
+		{"version", func(c *GroupContext) { c.Version = Version10 + 1 }, ErrUnsupportedVersion},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			alice := newTestClient(t, cs, "alice")
+			bob := newTestClient(t, cs, "bob")
+			g0, err := alice.NewGroup([]byte("group"), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			add := &Proposal{Type: ProposalTypeAdd, Add: &Add{KeyPackage: *bob.KeyPackage}}
+			g1, _, _, err := g0.Commit([]*Proposal{add})
+			if err != nil {
+				t.Fatal(err)
+			}
+			// Rebuild the epoch around the altered context, so
+			// that nothing but the check can catch it.
+			h := *g1
+			tt.mutate(&h.Context)
+			if h.schedule, err = newKeySchedule(cs, g1.schedule.JoinerSecret, nil, &h.Context); err != nil {
+				t.Fatal(err)
+			}
+			tag, err := cs.ConfirmationTag(h.schedule.ConfirmationKey, h.Context.ConfirmedTranscriptHash)
+			if err != nil {
+				t.Fatal(err)
+			}
+			w, err := h.welcome(tag, []proposal{{Proposal: add}}, []LeafIndex{1}, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := bob.Join(send(t, w).Welcome, nil); !errors.Is(err, tt.want) {
+				t.Errorf("Join = %v, want %v", err, tt.want)
+			}
+		})
+	}
+}

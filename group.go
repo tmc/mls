@@ -122,6 +122,12 @@ func (c *Client) join(w *Welcome, tree RatchetTree, old *Group) (*Group, error) 
 	if err != nil {
 		return nil, err
 	}
+	if info.GroupContext.CipherSuite != cs {
+		return nil, ErrUnsupportedCipherSuite
+	}
+	if info.GroupContext.Version != Version10 {
+		return nil, ErrUnsupportedVersion
+	}
 	var carried RatchetTree
 	if ok, err := info.Extensions.Decode(ExtensionTypeRatchetTree, &carried); err != nil {
 		return nil, err
