@@ -99,6 +99,9 @@ func copathChild(x NodeIndex, i LeafIndex) NodeIndex {
 // be the same as encrypting to its child.
 // See RFC 9420, Section 4.2.
 func (t RatchetTree) FilteredDirectPath(i LeafIndex) []NodeIndex {
+	if i >= t.Size() {
+		return nil
+	}
 	var path []NodeIndex
 	for _, x := range directPath(i.NodeIndex(), t.Size()) {
 		if len(t.Resolution(copathChild(x, i))) > 0 {
@@ -234,6 +237,9 @@ func (t RatchetTree) resolutionExcluding(x NodeIndex, exclude []LeafIndex) []Nod
 // the new leaf node's parent hash chains to the root.
 // See RFC 9420, Section 7.5.
 func (t *RatchetTree) MergeUpdatePath(cs CipherSuite, i LeafIndex, up *UpdatePath) error {
+	if i >= t.Size() {
+		return ErrLeafRange
+	}
 	t.blankPath(i)
 	leaf := up.LeafNode
 	t.set(i.NodeIndex(), &Node{Type: NodeTypeLeaf, Leaf: &leaf})
@@ -267,6 +273,9 @@ func (t *RatchetTree) MergeUpdatePath(cs CipherSuite, i LeafIndex, up *UpdatePat
 // epoch; its TreeHash is recomputed from the merged tree. Leaves that
 // the same commit added are named in exclude. See RFC 9420, Section 7.5.
 func (t RatchetTree) DecryptPathSecrets(cs CipherSuite, i LeafIndex, up *UpdatePath, ctx *GroupContext, s *TreeSecrets, exclude []LeafIndex) ([]byte, error) {
+	if i >= t.Size() {
+		return nil, ErrLeafRange
+	}
 	path := t.FilteredDirectPath(i)
 	if len(path) != len(up.Nodes) {
 		return nil, ErrBadTreeKEM
@@ -336,6 +345,9 @@ func (s *TreeSecrets) chain(cs CipherSuite, secret []byte, path []NodeIndex, key
 // this with the path secret a welcome message carries.
 // See RFC 9420, Section 12.4.3.1.
 func (s *TreeSecrets) SetPath(cs CipherSuite, t RatchetTree, x NodeIndex, secret []byte) error {
+	if s.Index >= t.Size() {
+		return ErrLeafRange
+	}
 	path := t.FilteredDirectPath(s.Index)
 	k := slices.Index(path, x)
 	if k < 0 {

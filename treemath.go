@@ -37,8 +37,12 @@ func nodeWidth(n LeafIndex) NodeIndex {
 	return NodeIndex(2*(n-1) + 1)
 }
 
-// root is the index of the root of a tree with n leaves.
+// root is the index of the root of a tree with n leaves, and 0 for
+// a tree with none.
 func root(n LeafIndex) NodeIndex {
+	if n == 0 {
+		return 0
+	}
 	w := uint32(nodeWidth(n))
 	return NodeIndex(1<<(32-bits.LeadingZeros32(w)-1) - 1)
 }
@@ -72,10 +76,11 @@ func (x NodeIndex) sibling() NodeIndex {
 }
 
 // directPath is the list of nodes from x's parent to the root of a
-// tree with n leaves, in that order.
+// tree with n leaves, in that order. It is nil for the root and for a
+// node outside the tree, whose parents never reach the root.
 func directPath(x NodeIndex, n LeafIndex) []NodeIndex {
 	r := root(n)
-	if x == r {
+	if x == r || x >= nodeWidth(n) {
 		return nil
 	}
 	var path []NodeIndex
@@ -87,9 +92,10 @@ func directPath(x NodeIndex, n LeafIndex) []NodeIndex {
 }
 
 // copath is the sibling of each node on the path from x to the root:
-// the nodes whose subtrees the path excludes.
+// the nodes whose subtrees the path excludes. It is nil for the root
+// and for a node outside the tree.
 func copath(x NodeIndex, n LeafIndex) []NodeIndex {
-	if x == root(n) {
+	if x == root(n) || x >= nodeWidth(n) {
 		return nil
 	}
 	path := append([]NodeIndex{x}, directPath(x, n)...)

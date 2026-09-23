@@ -78,6 +78,9 @@ func TestDirectPath(t *testing.T) {
 		{2, []NodeIndex{1, 3}, []NodeIndex{0, 5}},
 		{4, []NodeIndex{5, 3}, []NodeIndex{6, 1}},
 		{3, nil, nil},
+		{7, nil, nil}, // outside the tree
+		{1 << 31, nil, nil},
+		{1<<32 - 1, nil, nil},
 	}
 	for _, tt := range tests {
 		if got := directPath(tt.x, n); !equalNodes(got, tt.direct) {
@@ -86,6 +89,15 @@ func TestDirectPath(t *testing.T) {
 		if got := copath(tt.x, n); !equalNodes(got, tt.co) {
 			t.Errorf("copath(%d) = %v, want %v", tt.x, got, tt.co)
 		}
+	}
+}
+
+func TestRootEmpty(t *testing.T) {
+	if got := root(0); got != 0 {
+		t.Errorf("root(0) = %d, want 0", got)
+	}
+	if got := directPath(0, 0); got != nil {
+		t.Errorf("directPath(0, 0) = %v, want nil", got)
 	}
 }
 

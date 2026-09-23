@@ -315,3 +315,36 @@ func TestLeafRange(t *testing.T) {
 		}
 	}
 }
+
+// The tree operations must be total in the leaf index: an index past
+// the tree once made directPath loop forever, and one past 1<<31
+// wrapped around to another member's leaf.
+func TestTreeOutOfRange(t *testing.T) {
+	g := groupOf(t, 2)
+	cs := g.CipherSuite
+	want, err := Marshal(&g.Tree)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, i := range []LeafIndex{2, 3, 1 << 31, 1<<31 + 1} {
+		tr := g.Tree.Clone()
+		tr.Remove(i)
+		tr.Update(i, g.Tree.Leaf(0))
+		if got, err := Marshal(&tr); err != nil || !bytes.Equal(got, want) {
+			t.Errorf("Remove and Update of leaf %d changed the tree", i)
+		}
+		if got := tr.FilteredDirectPath(i); got != nil {
+			t.Errorf("FilteredDirectPath(%d) = %v, want nil", i, got)
+		}
+		if err := tr.MergeUpdatePath(cs, i, &UpdatePath{}); err != ErrLeafRange {
+			t.Errorf("MergeUpdatePath(%d) = %v, want %v", i, err, ErrLeafRange)
+		}
+		if _, err := tr.DecryptPathSecrets(cs, i, &UpdatePath{}, &g.Context, g.Secrets, nil); err != ErrLeafRange {
+			t.Errorf("DecryptPathSecrets(%d) = %v, want %v", i, err, ErrLeafRange)
+		}
+		s := NewTreeSecrets(i, nil)
+		if err := s.SetPath(cs, tr, 1, nil); err != ErrLeafRange {
+			t.Errorf("SetPath(%d) = %v, want %v", i, err, ErrLeafRange)
+		}
+	}
+}

@@ -405,16 +405,23 @@ func (t *RatchetTree) Add(leaf *LeafNode) LeafIndex {
 }
 
 // Update replaces the leaf node at i and blanks the nodes above it,
-// whose keys the old member knew. See RFC 9420, Section 13.4.3.
+// whose keys the old member knew. It does nothing if i is not a leaf
+// of the tree. See RFC 9420, Section 13.4.3.
 func (t *RatchetTree) Update(i LeafIndex, leaf *LeafNode) {
+	if i >= t.Size() {
+		return
+	}
 	t.set(i.NodeIndex(), &Node{Type: NodeTypeLeaf, Leaf: leaf})
 	t.blankPath(i)
 }
 
 // Remove blanks the leaf at i along with the nodes above it, then
-// trims the tree if its right half has emptied.
-// See RFC 9420, Section 13.4.3.
+// trims the tree if its right half has emptied. It does nothing if i
+// is not a leaf of the tree. See RFC 9420, Section 13.4.3.
 func (t *RatchetTree) Remove(i LeafIndex) {
+	if i >= t.Size() {
+		return
+	}
 	if int(i.NodeIndex()) < len(*t) {
 		(*t)[i.NodeIndex()] = nil
 	}
@@ -424,6 +431,9 @@ func (t *RatchetTree) Remove(i LeafIndex) {
 
 // blankPath blanks every node between leaf i and the root.
 func (t *RatchetTree) blankPath(i LeafIndex) {
+	if i >= t.Size() {
+		return
+	}
 	for _, x := range directPath(i.NodeIndex(), t.Size()) {
 		if int(x) < len(*t) {
 			(*t)[x] = nil
