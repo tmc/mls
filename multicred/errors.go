@@ -13,3 +13,7 @@ var ErrNoBindings = errors.New("multicred: credential has no bindings")
 // ErrNested is reported for a binding whose credential is itself a
 // multi-credential.
 var ErrNested = errors.New("multicred: binding holds a multi-credential")
+
+// ErrTooManyBindings is reported for a multi-credential with more
+// than [MaxBindings] bindings.
+var ErrTooManyBindings = errors.New("multicred: too many bindings")

@@ -140,7 +140,24 @@ type Credential struct {
 	Bindings []Binding
 }
 
+// MaxBindings is the most bindings a multi-credential may hold.
+//
+// The draft sets no limit, but every binding costs each member of the
+// group a signature verification for every leaf node that carries it,
+// and a key package can hold as many bindings as fit in its bytes.
+// The uses the draft names - an identity from the messaging service
+// beside one from an employer, or an old credential beside its
+// replacement during a migration - need two or three, so 16 leaves
+// room for any plausible combination while bounding that cost.
+// Encoding, decoding and verifying all reject more with
+// [ErrTooManyBindings].
+const MaxBindings = 16
+
 func (c *Credential) MarshalTLS(w *tlssyntax.Writer) {
+	if len(c.Bindings) > MaxBindings {
+		w.SetError(ErrTooManyBindings)
+		return
+	}
 	w.WriteVector(func(w *tlssyntax.Writer) {
 		for i := range c.Bindings {
 			c.Bindings[i].MarshalTLS(w)
@@ -151,6 +168,10 @@ func (c *Credential) MarshalTLS(w *tlssyntax.Writer) {
 func (c *Credential) UnmarshalTLS(r *tlssyntax.Reader) {
 	*c = Credential{}
 	r.ReadAll(func(r *tlssyntax.Reader) {
+		if len(c.Bindings) == MaxBindings {
+			r.SetError(fmt.Errorf("%w: %w", tlssyntax.ErrMalformed, ErrTooManyBindings))
+			return
+		}
 		var b Binding
 		b.UnmarshalTLS(r)
 		c.Bindings = append(c.Bindings, b)
@@ -175,6 +196,9 @@ func (c *Credential) UnmarshalTLS(r *tlssyntax.Reader) {
 func (c *Credential) Verify(signatureKey mls.SignaturePublicKey, supported func(*Binding) bool) error {
 	if len(c.Bindings) == 0 {
 		return ErrNoBindings
+	}
+	if len(c.Bindings) > MaxBindings {
+		return ErrTooManyBindings
 	}
 	for i := range c.Bindings {
 		b := &c.Bindings[i]

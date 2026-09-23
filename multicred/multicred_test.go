@@ -183,6 +183,53 @@ func TestNested(t *testing.T) {
 	}
 }
 
+func TestMaxBindings(t *testing.T) {
+	cs := mls.X25519AES128GCMSHA256Ed25519
+	_, signatureKey, err := cs.GenerateSignatureKeyPair()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var bindings []multicred.Binding
+	for range multicred.MaxBindings + 1 {
+		bindings = append(bindings, newBinding(t, cs, "alice@example.com", signatureKey))
+	}
+	tests := []struct {
+		n       int
+		wantErr bool
+	}{
+		{multicred.MaxBindings, false},
+		{multicred.MaxBindings + 1, true},
+	}
+	for _, tt := range tests {
+		c := &multicred.Credential{Bindings: bindings[:tt.n]}
+		// Encode the bindings directly, since Marshal refuses too many.
+		var w tlssyntax.Writer
+		w.WriteVector(func(w *tlssyntax.Writer) {
+			for i := range c.Bindings {
+				c.Bindings[i].MarshalTLS(w)
+			}
+		})
+		enc, err := w.Bytes()
+		if err != nil {
+			t.Fatal(err)
+		}
+		var got multicred.Credential
+		errs := map[string]error{
+			"Unmarshal": mls.Unmarshal(enc, &got),
+			"Verify":    c.Verify(signatureKey, nil),
+		}
+		_, errs["Marshal"] = mls.Marshal(c)
+		for name, err := range errs {
+			if tt.wantErr && !errors.Is(err, multicred.ErrTooManyBindings) {
+				t.Errorf("%s of %d bindings: %v, want %v", name, tt.n, err, multicred.ErrTooManyBindings)
+			}
+			if !tt.wantErr && err != nil {
+				t.Errorf("%s of %d bindings: %v", name, tt.n, err)
+			}
+		}
+	}
+}
+
 func TestRegisterCredentialPanics(t *testing.T) {
 	defer func() {
 		if recover() == nil {
