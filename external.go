@@ -223,9 +223,10 @@ func (c *ExternalClient) Propose(groupID []byte, epoch uint64, p *Proposal) (*Me
 
 // ProposeAdd frames a proposal by which c asks to be added to the
 // group named by groupID in the given epoch, without being invited by
-// a member. The group's members decide whether to commit it; RFC
-// 9420, Section 12.1.8 leaves that decision to the application, since
-// the proposal authenticates only the key package it carries.
+// a member. The group's members decide whether to commit it, through
+// [Client.ExternalProposal]; RFC 9420, Section 12.1.8 leaves that
+// decision to the application, since the proposal authenticates only
+// the key package it carries.
 func (c *Client) ProposeAdd(groupID []byte, epoch uint64) (*Message, error) {
 	p := &Proposal{Type: ProposalTypeAdd, Add: &Add{KeyPackage: *c.KeyPackage}}
 	return proposeExternal(c.CipherSuite, c.SignaturePriv, Sender{

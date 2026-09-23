@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/subtle"
 	"encoding/hex"
+	"fmt"
 	"maps"
 	"time"
 )
@@ -24,6 +25,17 @@ type Client struct {
 	// group's own history. A nil PSK rejects any commit that needs
 	// an external key.
 	PSK func(id PreSharedKeyID) ([]byte, error)
+
+	// ExternalProposal decides whether to accept a proposal from
+	// outside the group: from an external sender the group
+	// provisioned, or from a client asking to be added (see
+	// [ExternalClient.Propose] and [Client.ProposeAdd]). An accepted
+	// proposal is committed by the member's next commit like any
+	// other. RFC 9420, Section 12.1.8 leaves this decision to the
+	// application; a nil ExternalProposal accepts none. Members
+	// should share a policy, since a member that did not accept a
+	// proposal cannot process a commit that covers it.
+	ExternalProposal func(c *AuthenticatedContent) error
 
 	// Padding blurs the length of the messages [Group.Protect]
 	// produces: the plaintext is padded with zeros until its length
@@ -49,6 +61,7 @@ type Group struct {
 	interim    []byte // interim transcript hash
 	keys       *secretTree
 	proposals  map[string]*AuthenticatedContent // by proposal reference
+	updated    map[LeafIndex]string             // references of the staged updates, by leaf
 	updates    map[string][]byte                // encryption keys of one's own updates, by public key
 	resumption map[uint64][]byte                // resumption PSKs, by epoch
 	prior      *Group                           // the group this one was resumed from
@@ -359,6 +372,11 @@ func (g *Group) Protect(authenticatedData, plaintext []byte) (*Message, error) {
 	return &Message{Version: g.Context.Version, WireFormat: WireFormatPrivateMessage, PrivateMessage: pm}, nil
 }
 
+// maxProposals is the most proposals a group remembers in one epoch.
+// It bounds what a sender, member or not, can make every member store
+// and every committer consider.
+const maxProposals = 1024
+
 // Handle processes a handshake message. A proposal is remembered
 // until a commit refers to it, and Handle returns g unchanged; a
 // commit ends the epoch, and Handle returns the group's state in the
@@ -380,6 +398,11 @@ func (g *Group) Handle(m *Message) (*Group, error) {
 // AddProposal remembers a proposal so that a later commit can refer
 // to it by reference.
 //
+// A proposal from outside the group, whether from an external sender
+// or from a client asking to be added, is remembered only if the
+// client's [Client.ExternalProposal] accepts it. At most
+// maxProposals proposals are remembered in one epoch.
+//
 // A member that rotates its keys twice in one epoch supersedes its
 // own earlier update: only the later one is remembered. RFC 9420,
 // Section 12.2 allows a commit to cover at most one update for any
@@ -388,6 +411,16 @@ func (g *Group) Handle(m *Message) (*Group, error) {
 func (g *Group) AddProposal(c *AuthenticatedContent) error {
 	if c.Content.ContentType != ContentTypeProposal {
 		return ErrNotProposal
+	}
+	switch c.Content.Sender.Type {
+	case SenderTypeExternal, SenderTypeNewMemberProposal:
+		accept := g.client.ExternalProposal
+		if accept == nil {
+			return ErrExternalProposal
+		}
+		if err := accept(c); err != nil {
+			return fmt.Errorf("%w: %w", ErrExternalProposal, err)
+		}
 	}
 	// A key package is checked on receipt, so that one that could
 	// never be committed is not kept. Its lifetime is checked when
@@ -400,22 +433,31 @@ func (g *Group) AddProposal(c *AuthenticatedContent) error {
 			return err
 		}
 	}
-	ref, err := c.Ref(g.CipherSuite)
+	b, err := c.Ref(g.CipherSuite)
 	if err != nil {
 		return err
 	}
-	if c.Content.Proposal.Type == ProposalTypeUpdate {
-		if i, ok := touchedLeaf(c.Content.Proposal, c.Content.Sender); ok {
-			for r, old := range g.proposals {
-				p := old.Content.Proposal
-				if j, ok := touchedLeaf(p, old.Content.Sender); ok &&
-					p.Type == ProposalTypeUpdate && j == i {
-					delete(g.proposals, r)
-				}
-			}
-		}
+	ref := hex.EncodeToString(b)
+	if _, ok := g.proposals[ref]; ok {
+		return nil
 	}
-	g.proposals[hex.EncodeToString(ref)] = c
+	i, update := touchedLeaf(c.Content.Proposal, c.Content.Sender)
+	update = update && c.Content.Proposal.Type == ProposalTypeUpdate
+	superseded, ok := g.updated[i]
+	ok = ok && update
+	if !ok && len(g.proposals) >= maxProposals {
+		return ErrTooManyProposals
+	}
+	if update {
+		if ok {
+			delete(g.proposals, superseded)
+		}
+		if g.updated == nil {
+			g.updated = make(map[LeafIndex]string)
+		}
+		g.updated[i] = ref
+	}
+	g.proposals[ref] = c
 	return nil
 }
 

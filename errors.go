@@ -206,3 +206,11 @@ var ErrNotResumed = errors.New("mls: group does not resume the one given")
 // Reinit proposal, which ends it: its members move to the group
 // [Group.Reinitialize] creates. See RFC 9420, Section 11.2.
 var ErrReinitialized = errors.New("mls: group has been reinitialized")
+
+// ErrExternalProposal is reported for a proposal from outside the
+// group that the client's [Client.ExternalProposal] did not accept.
+var ErrExternalProposal = errors.New("mls: proposal from outside the group not accepted")
+
+// ErrTooManyProposals is reported for a proposal that would take the
+// number a group remembers in one epoch past the limit.
+var ErrTooManyProposals = errors.New("mls: too many proposals in one epoch")

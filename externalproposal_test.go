@@ -14,6 +14,9 @@ func TestExternalProposal(t *testing.T) {
 	alice := newTestClient(t, cs, "alice")
 	bob := newTestClient(t, cs, "bob")
 	carol := newTestClient(t, cs, "carol")
+	accept := func(*AuthenticatedContent) error { return nil }
+	alice.ExternalProposal = accept
+	bob.ExternalProposal = accept
 
 	// The group provisions a signature key for a service that may
 	// propose on its behalf.
@@ -147,5 +150,70 @@ func TestExternalProposalRules(t *testing.T) {
 	}
 	if _, err := plain.Handle(send(t, msg)); !errors.Is(err, ErrBadExternalSender) {
 		t.Errorf("Handle = %v, want %v", err, ErrBadExternalSender)
+	}
+}
+
+// A proposal from outside the group is staged only if the client's
+// policy accepts it; without one, a stranger asking to join would be
+// added by the next commit of any member.
+func TestExternalProposalPolicy(t *testing.T) {
+	cs := X25519AES128GCMSHA256Ed25519
+	eve := newTestClient(t, cs, "eve")
+	errNo := errors.New("not eve")
+	tests := []struct {
+		name   string
+		policy func(*AuthenticatedContent) error
+		want   error
+	}{
+		{"no policy", nil, ErrExternalProposal},
+		{"policy refuses", func(*AuthenticatedContent) error { return errNo }, errNo},
+		{"policy accepts", func(*AuthenticatedContent) error { return nil }, nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a, _, _ := threeMember(t)
+			a.client.ExternalProposal = tt.policy
+			ask, err := eve.ProposeAdd(a.Context.GroupID, a.Context.Epoch)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := a.Handle(send(t, ask)); !errors.Is(err, tt.want) {
+				t.Fatalf("Handle = %v, want %v", err, tt.want)
+			}
+			a2, _, _, err := a.Commit(nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := 3
+			if tt.want == nil {
+				want = 4
+			}
+			if got := members(a2.Tree); got != want {
+				t.Errorf("members = %d, want %d", got, want)
+			}
+		})
+	}
+}
+
+// A group remembers a bounded number of proposals in one epoch.
+func TestTooManyProposals(t *testing.T) {
+	a, b, _ := threeMember(t)
+	stageUpdate(t, a, b)
+	for i := 1; i <= maxProposals; i++ {
+		p := externalPSK("k")
+		p.PreSharedKey.PSK.PSKNonce[0] = byte(i)
+		p.PreSharedKey.PSK.PSKNonce[1] = byte(i >> 8)
+		_, err := a.Propose(p)
+		if i < maxProposals && err != nil {
+			t.Fatalf("proposal %d: %v", i, err)
+		}
+		if i == maxProposals && !errors.Is(err, ErrTooManyProposals) {
+			t.Fatalf("proposal %d: %v, want %v", i, err, ErrTooManyProposals)
+		}
+	}
+	// An update that supersedes a staged one adds nothing.
+	stageUpdate(t, a, b)
+	if n := len(a.proposals); n != maxProposals {
+		t.Errorf("%d proposals staged, want %d", n, maxProposals)
 	}
 }
