@@ -200,11 +200,17 @@ func (r *Reader) ReadOptional() bool {
 }
 
 // ReadAll reads elements from a <V> vector until it is exhausted,
-// calling read once per element.
+// calling read once per element. A call to read that consumes no
+// bytes and records no error is an error, since it would never
+// exhaust the vector.
 func (r *Reader) ReadAll(read func(r *Reader)) {
 	v := r.ReadVector()
 	for !v.Empty() {
+		n := v.Len()
 		read(v)
+		if v.Len() == n && v.Err() == nil {
+			v.failf("tlssyntax: vector element consumed no input")
+		}
 	}
 }
 

@@ -234,6 +234,18 @@ func TestErrorIsSticky(t *testing.T) {
 	}
 }
 
+func TestReadAllNoProgress(t *testing.T) {
+	r := NewReader(decodeHex(t, "020001"))
+	calls := 0
+	r.ReadAll(func(r *Reader) { calls++ })
+	if r.Err() == nil {
+		t.Error("ReadAll with an element reader that reads nothing succeeded, want error")
+	}
+	if calls != 1 {
+		t.Errorf("read called %d times, want 1", calls)
+	}
+}
+
 func TestUnmarshalTrailingData(t *testing.T) {
 	var v uint16s
 	if err := Unmarshal(decodeHex(t, "020001ff"), &v); err == nil {
