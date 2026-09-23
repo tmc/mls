@@ -581,12 +581,13 @@ func (g *Group) ApplyCommit(c *AuthenticatedContent) (*Group, error) {
 	next.reinit = ch.reinit
 	if external {
 		// The joiner takes the leftmost free leaf, as an Add
-		// would give it. See RFC 9420, Section 12.4.3.2.
+		// would give it. See RFC 9420, Section 12.4.3.2. The
+		// leaf is empty until the path is merged into it, so that
+		// the merge sees the path's keys as new, which they are.
 		if ch.kemOutput == nil {
 			return nil, ErrBadExternalCommit
 		}
-		leaf := commit.Path.LeafNode
-		sender = next.Tree.Add(&leaf)
+		sender = next.Tree.Add(new(LeafNode))
 	}
 	if next.Tree.Leaf(g.Index) == nil {
 		return nil, ErrRemoved

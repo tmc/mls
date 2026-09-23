@@ -240,6 +240,25 @@ func (t *RatchetTree) MergeUpdatePath(cs CipherSuite, i LeafIndex, up *UpdatePat
 	if i >= t.Size() {
 		return ErrLeafRange
 	}
+	// Every key the path introduces must be new, which the merge
+	// is about to hide: the committer's current leaf key and the
+	// keys on its old path are overwritten, and checking the merged
+	// tree alone would miss a path that reuses one of them.
+	// See RFC 9420, Section 12.4.2.
+	old := make(map[string]bool, len(*t))
+	for x := range NodeIndex(len(*t)) {
+		if key := t.encryptionKey(x); key != nil {
+			old[string(key)] = true
+		}
+	}
+	if old[string(up.LeafNode.EncryptionKey)] {
+		return ErrDuplicateLeafKey
+	}
+	for _, n := range up.Nodes {
+		if old[string(n.EncryptionKey)] {
+			return ErrDuplicateNodeKey
+		}
+	}
 	t.blankPath(i)
 	leaf := up.LeafNode
 	t.set(i.NodeIndex(), &Node{Type: NodeTypeLeaf, Leaf: &leaf})

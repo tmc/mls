@@ -183,3 +183,43 @@ func testTreeKEM(t *testing.T, vec *treeKEMVector) {
 		}
 	}
 }
+
+// An update path must bring only new keys. The committer's current
+// leaf key and the keys on its old path are overwritten by the merge,
+// so checking the merged tree alone does not catch their reuse.
+// See RFC 9420, Section 12.4.2.
+func TestMergeUpdatePathReusedKey(t *testing.T) {
+	a1, b1, _ := threeMember(t)
+	cs := a1.CipherSuite
+	_, msg, _, err := a1.Commit(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := msg.PublicMessage.Content.Commit.Path
+	tr := b1.Tree.Clone()
+	if err := tr.MergeUpdatePath(cs, a1.Index, path); err != nil {
+		t.Fatalf("a legitimate path was rejected: %v", err)
+	}
+	for _, tt := range []struct {
+		name string
+		bad  func(*UpdatePath)
+		want error
+	}{
+		{"old leaf key", func(up *UpdatePath) {
+			up.LeafNode.EncryptionKey = b1.Tree.Leaf(a1.Index).EncryptionKey
+		}, ErrDuplicateLeafKey},
+		{"old path key", func(up *UpdatePath) {
+			up.Nodes[0].EncryptionKey = b1.Tree.encryptionKey(b1.Tree.FilteredDirectPath(a1.Index)[0])
+		}, ErrDuplicateNodeKey},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			up := *path
+			up.Nodes = slices.Clone(path.Nodes)
+			tt.bad(&up)
+			tr := b1.Tree.Clone()
+			if err := tr.MergeUpdatePath(cs, a1.Index, &up); err != tt.want {
+				t.Errorf("MergeUpdatePath = %v, want %v", err, tt.want)
+			}
+		})
+	}
+}
