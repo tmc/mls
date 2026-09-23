@@ -267,7 +267,9 @@ func (l *proposalList) check(p proposal) error {
 		}
 		// Section 11.1: the members already in the group must
 		// meet whatever the proposal requires of them, since
-		// nothing else will check them again.
+		// nothing else will check them again. A member the
+		// commit removes is no longer among them (Section
+		// 12.1.7).
 		var req RequiredCapabilities
 		ok, err := p.GroupContextExtensions.Extensions.Decode(ExtensionTypeRequiredCapabilities, &req)
 		if err != nil {
@@ -277,7 +279,7 @@ func (l *proposalList) check(p proposal) error {
 			break
 		}
 		for i, n := range l.tree.Members() {
-			if !req.Supported(&n.Capabilities) {
+			if !l.removed[i] && !req.Supported(&n.Capabilities) {
 				return fmt.Errorf("%w: leaf %d does not meet the required capabilities", ErrProposalList, i)
 			}
 		}

@@ -187,3 +187,34 @@ func TestCommitDropsOwnUpdate(t *testing.T) {
 		t.Fatal("epoch authenticators disagree")
 	}
 }
+
+// An update may take up a key held by a member the same commit
+// removes, which is no longer a member when the update applies.
+func TestUpdateKeyOfRemoved(t *testing.T) {
+	a, b, c := threeMember(t)
+	cs := b.CipherSuite
+	leaf := *b.Tree.Leaf(b.Index)
+	leaf.EncryptionKey = c.Tree.Leaf(c.Index).EncryptionKey
+	leaf.Source = LeafNodeSourceUpdate
+	leaf.Lifetime = Lifetime{}
+	if err := leaf.Sign(cs, b.client.SignaturePriv, b.Context.GroupID, b.Index); err != nil {
+		t.Fatal(err)
+	}
+	m, err := b.ProposeUpdate(&leaf, c.client.EncryptionPriv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.Handle(send(t, m)); err != nil {
+		t.Fatal(err)
+	}
+	a2, commit, _, err := a.Commit([]*Proposal{{Type: ProposalTypeRemove, Remove: &Remove{Removed: uint32(c.Index)}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(a2.Tree.Leaf(b.Index).EncryptionKey, leaf.EncryptionKey) {
+		t.Error("the commit left the update out")
+	}
+	if _, err := b.Handle(send(t, commit)); err != nil {
+		t.Errorf("the proposer rejects the commit: %v", err)
+	}
+}

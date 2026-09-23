@@ -78,3 +78,46 @@ func TestProposalList(t *testing.T) {
 		t.Errorf("Commit = %v, want %v", err, ErrProposalList)
 	}
 }
+
+// A group_context_extensions proposal need not be met by a member
+// the same commit removes. See RFC 9420, Section 12.1.7.
+func TestRequiredCapabilitiesRemoved(t *testing.T) {
+	cs := X25519AES128GCMSHA256Ed25519
+	const custom ProposalType = 0xf000
+	capable := func(name string) *Client {
+		c := newTestClient(t, cs, name)
+		c.KeyPackage.LeafNode.Capabilities.Proposals = []ProposalType{custom}
+		if err := c.KeyPackage.LeafNode.Sign(cs, c.SignaturePriv, nil, 0); err != nil {
+			t.Fatal(err)
+		}
+		if err := c.KeyPackage.Sign(c.SignaturePriv); err != nil {
+			t.Fatal(err)
+		}
+		return c
+	}
+	alice, bob := capable("alice"), capable("bob")
+	carol := newTestClient(t, cs, "carol")
+	g, err := alice.NewGroup([]byte("group"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	add := func(c *Client) *Proposal {
+		return &Proposal{Type: ProposalTypeAdd, Add: &Add{KeyPackage: *c.KeyPackage}}
+	}
+	g, _, _, err = g.Commit([]*Proposal{add(bob), add(carol)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ext Extensions
+	if err := ext.Set(ExtensionTypeRequiredCapabilities, &RequiredCapabilities{ProposalTypes: []ProposalType{custom}}); err != nil {
+		t.Fatal(err)
+	}
+	require := &Proposal{Type: ProposalTypeGroupContextExtensions, GroupContextExtensions: &GroupContextExtensions{Extensions: ext}}
+	if _, _, _, err := g.Commit([]*Proposal{require}); !errors.Is(err, ErrProposalList) {
+		t.Errorf("Commit(require) = %v, want %v", err, ErrProposalList)
+	}
+	remove := &Proposal{Type: ProposalTypeRemove, Remove: &Remove{Removed: 2}}
+	if _, _, _, err := g.Commit([]*Proposal{remove, require}); err != nil {
+		t.Errorf("Commit(remove carol, require) = %v", err)
+	}
+}

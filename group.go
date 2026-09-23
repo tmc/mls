@@ -688,6 +688,7 @@ func (g *Group) apply(proposals []proposal) (*changes, error) {
 			g.Context.Extensions = p.GroupContextExtensions.Extensions
 		}
 	}
+	var updated []LeafIndex
 	for _, p := range proposals {
 		if p.Type == ProposalTypeUpdate {
 			leaf := p.Update.LeafNode
@@ -700,10 +701,8 @@ func (g *Group) apply(proposals []proposal) (*changes, error) {
 			if bytes.Equal(old.EncryptionKey, leaf.EncryptionKey) {
 				return nil, ErrDuplicateLeafKey
 			}
-			if err := g.Tree.validateLeafInGroup(g.CipherSuite, &leaf, p.leaf(), &g.Context, LeafNodeSourceUpdate); err != nil {
-				return nil, err
-			}
 			g.Tree.Update(p.leaf(), &leaf)
+			updated = append(updated, p.leaf())
 		}
 	}
 	for _, p := range proposals {
@@ -712,6 +711,18 @@ func (g *Group) apply(proposals []proposal) (*changes, error) {
 				return nil, ErrLeafRange
 			}
 			g.Tree.Remove(LeafIndex(p.Remove.Removed))
+		}
+	}
+	// The updated leaves are checked against the members that
+	// remain, so that a key held by a member the commit removes
+	// does not count as taken.
+	for _, i := range updated {
+		leaf := g.Tree.Leaf(i)
+		if leaf == nil {
+			return nil, ErrLeafRange
+		}
+		if err := g.Tree.validateLeafInGroup(g.CipherSuite, leaf, i, &g.Context, LeafNodeSourceUpdate); err != nil {
+			return nil, err
 		}
 	}
 	for _, p := range proposals {
