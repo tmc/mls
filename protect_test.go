@@ -102,6 +102,21 @@ func raw(t *testing.T, c *AuthenticatedContent) []byte {
 	}
 }
 
+// openPrivate decrypts m under tree without checking the signature,
+// spending the key it used.
+func openPrivate(cs CipherSuite, m *PrivateMessage, tree *secretTree, senderDataSecret []byte) (*AuthenticatedContent, error) {
+	data, err := m.openSenderData(cs, senderDataSecret)
+	if err != nil {
+		return nil, err
+	}
+	c, advance, err := m.authenticatedContent(cs, tree, data)
+	if err != nil {
+		return nil, err
+	}
+	advance()
+	return c, nil
+}
+
 func TestMessageProtectionVectors(t *testing.T) {
 	var vectors []messageProtectionVector
 	loadVectors(t, "message-protection", &vectors)
@@ -181,7 +196,7 @@ func TestMessageProtectionVectors(t *testing.T) {
 						t.Fatalf("Unmarshal private message: %v", err)
 					}
 					tree := newSecretTree(cs, protectionMembers, vec.EncryptionSecret)
-					got, err := m.PrivateMessage.authenticatedContent(cs, tree, vec.SenderDataSecret)
+					got, err := openPrivate(cs, m.PrivateMessage, tree, vec.SenderDataSecret)
 					if err != nil {
 						t.Fatalf("unprotect private message: %v", err)
 					}
@@ -207,7 +222,7 @@ func TestMessageProtectionVectors(t *testing.T) {
 						t.Fatalf("PrivateMessage: %v", err)
 					}
 					recv := newSecretTree(cs, protectionMembers, vec.EncryptionSecret)
-					got, err = enc.authenticatedContent(cs, recv, vec.SenderDataSecret)
+					got, err = openPrivate(cs, enc, recv, vec.SenderDataSecret)
 					if err != nil {
 						t.Fatalf("unprotect our own private message: %v", err)
 					}
@@ -255,6 +270,77 @@ func TestSenderDataDoesNotSpendKeys(t *testing.T) {
 	}
 	if _, err := a.Unprotect(send(t, real)); err != nil {
 		t.Errorf("a rejected message silenced leaf %d: %v", b.Index, err)
+	}
+}
+
+// Every member of an epoch can derive every leaf's keys, so a message
+// that decrypts under Bob's keys may still come from Carol. Only Bob's
+// signature may spend Bob's keys.
+func TestForgedSignatureDoesNotSpendKeys(t *testing.T) {
+	a, b, c := threeMember(t)
+	cs := a.CipherSuite
+
+	// Carol encrypts under Bob's ratchet, a few generations on,
+	// content that names Bob but carries her own signature.
+	r, err := c.keys.ratchet(b.Index, ContentTypeApplication)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for range 5 {
+		if _, _, err := r.Next(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	forged := &AuthenticatedContent{
+		WireFormat: WireFormatPrivateMessage,
+		Content: FramedContent{
+			GroupID:         c.Context.GroupID,
+			Epoch:           c.Context.Epoch,
+			Sender:          Sender{Type: SenderTypeMember, LeafIndex: uint32(b.Index)},
+			ContentType:     ContentTypeApplication,
+			ApplicationData: []byte("from bob, honestly"),
+		},
+	}
+	if err := forged.Sign(cs, c.client.SignaturePriv, c.Context.Version, &c.Context); err != nil {
+		t.Fatal(err)
+	}
+	pm, err := forged.privateMessage(cs, r, c.schedule.SenderDataSecret, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := &Message{Version: c.Context.Version, WireFormat: WireFormatPrivateMessage, PrivateMessage: pm}
+	if _, err := a.Unprotect(send(t, m)); err == nil {
+		t.Fatal("a message with a forged signature was accepted")
+	}
+
+	real, err := b.Protect(nil, []byte("hello"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.Unprotect(send(t, real)); err != nil {
+		t.Errorf("a forged signature spent leaf %d's keys: %v", b.Index, err)
+	}
+}
+
+// Sender data that names a leaf no member occupies is refused before
+// any key of that leaf is derived. See RFC 9420, Section 6.3.2.
+func TestSenderDataBlankLeaf(t *testing.T) {
+	a, b, _ := threeMember(t)
+	cs := a.CipherSuite
+	m, err := b.Protect(nil, []byte("hello"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	forged, err := m.PrivateMessage.sealSenderData(cs, b.schedule.SenderDataSecret, &SenderData{LeafIndex: 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.PrivateMessage.EncryptedSenderData = forged
+	if _, err := a.Unprotect(send(t, m)); err != ErrNotMember {
+		t.Errorf("Unprotect = %v, want %v", err, ErrNotMember)
+	}
+	if _, ok := a.keys.ratchets[3]; ok {
+		t.Error("Unprotect derived the ratchets of a blank leaf")
 	}
 }
 

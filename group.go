@@ -244,15 +244,30 @@ func (c *Client) pskSecret(ids []PreSharedKeyID, g *Group) ([]byte, error) {
 func (g *Group) Unprotect(m *Message) (*AuthenticatedContent, error) {
 	cs := g.CipherSuite
 	var (
-		c   *AuthenticatedContent
-		err error
+		c       *AuthenticatedContent
+		advance func()
+		err     error
 	)
 	public := m.PublicMessage != nil
 	switch {
 	case public:
 		c, err = m.PublicMessage.AuthenticatedContent(cs, g.schedule.MembershipKey, &g.Context)
 	case m.PrivateMessage != nil:
-		c, err = m.PrivateMessage.authenticatedContent(cs, g.keys, g.schedule.SenderDataSecret)
+		pm := m.PrivateMessage
+		data, err := pm.openSenderData(cs, g.schedule.SenderDataSecret)
+		if err != nil {
+			return nil, err
+		}
+		// The sender must occupy its leaf, and is checked before
+		// any key of that leaf is derived. See RFC 9420,
+		// Section 6.3.2.
+		if g.Tree.Leaf(LeafIndex(data.LeafIndex)) == nil {
+			return nil, ErrNotMember
+		}
+		c, advance, err = pm.authenticatedContent(cs, g.keys, data)
+		if err != nil {
+			return nil, err
+		}
 	default:
 		return nil, ErrNotForGroup
 	}
@@ -303,6 +318,9 @@ func (g *Group) Unprotect(m *Message) (*AuthenticatedContent, error) {
 	}
 	if err := c.Verify(cs, key, g.Context.Version, &g.Context); err != nil {
 		return nil, err
+	}
+	if advance != nil {
+		advance()
 	}
 	return c, nil
 }

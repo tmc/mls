@@ -102,36 +102,35 @@ func (c *AuthenticatedContent) privateMessage(cs CipherSuite, r *ratchet, sender
 	return m, nil
 }
 
-// AuthenticatedContent decrypts a private message. It takes the
-// sender's ratchet from tree, so tree must be the secret tree of the
-// epoch the message was sent in. The caller must still verify the
-// signature; see [AuthenticatedContent.Verify].
-func (m *PrivateMessage) authenticatedContent(cs CipherSuite, tree *secretTree, senderDataSecret []byte) (*AuthenticatedContent, error) {
-	data, err := m.openSenderData(cs, senderDataSecret)
-	if err != nil {
-		return nil, err
-	}
+// authenticatedContent decrypts a private message whose sender data,
+// recovered by openSenderData, is data. It takes the sender's ratchet
+// from tree, so tree must be the secret tree of the epoch the message
+// was sent in.
+//
+// The ratchet is left where it was: authenticatedContent returns a
+// function that advances it past the message's generation, which the
+// caller must call only once it has verified the signature; see
+// [AuthenticatedContent.Verify]. Every member of the epoch can derive
+// every leaf's keys, so a message that decrypts proves nothing about
+// who sent it: only a valid signature from the leaf it names may
+// spend that leaf's keys.
+func (m *PrivateMessage) authenticatedContent(cs CipherSuite, tree *secretTree, data *SenderData) (*AuthenticatedContent, func(), error) {
 	r, err := tree.ratchet(LeafIndex(data.LeafIndex), m.ContentType)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	key, nonce, advance, err := r.Key(data.Generation)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	aead, err := cs.AEAD(key)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	plaintext, err := aead.Open(nil, applyGuard(nonce, data.ReuseGuard), m.Ciphertext, m.contentAAD())
 	if err != nil {
-		// The ratchet is left where it was. Any member of the
-		// epoch can write any leaf index into the sender data,
-		// so a message that does not decrypt must not be able
-		// to spend the keys of the leaf it names.
-		return nil, err
+		return nil, nil, err
 	}
-	advance()
 
 	c := &AuthenticatedContent{
 		WireFormat: WireFormatPrivateMessage,
@@ -156,9 +155,9 @@ func (m *PrivateMessage) authenticatedContent(cs CipherSuite, tree *secretTree, 
 		}
 	}))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return c, nil
+	return c, advance, nil
 }
 
 // contentAAD is the additional authenticated data for the content
