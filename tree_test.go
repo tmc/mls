@@ -303,3 +303,15 @@ func TestVerifyUnmergedLeaves(t *testing.T) {
 		})
 	}
 }
+
+// A leaf index at or past the size of the tree names no leaf,
+// however large. LeafIndex.NodeIndex wraps at 1<<31, which once made
+// Leaf(1<<31+1) return leaf 1.
+func TestLeafRange(t *testing.T) {
+	tr := groupOf(t, 2).Tree
+	for _, i := range []LeafIndex{2, 3, 1 << 31, 1<<31 + 1, 1<<32 - 1} {
+		if tr.Leaf(i) != nil {
+			t.Errorf("Leaf(%d) = non-nil, want nil", i)
+		}
+	}
+}

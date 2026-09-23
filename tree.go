@@ -30,8 +30,13 @@ func (t RatchetTree) Node(x NodeIndex) *Node {
 }
 
 // Leaf returns the leaf node of the member at i, or nil if that leaf
-// is blank.
+// is blank or i is not a leaf of the tree.
 func (t RatchetTree) Leaf(i LeafIndex) *LeafNode {
+	// The bound comes first: i.NodeIndex wraps for i >= 1<<31,
+	// which would otherwise name some other member's leaf.
+	if i >= t.Size() {
+		return nil
+	}
 	if n := t.Node(i.NodeIndex()); n != nil {
 		return n.Leaf
 	}

@@ -164,3 +164,16 @@ func TestCommitWithoutPathAllowed(t *testing.T) {
 		t.Errorf("epoch = %d, want 2", b2.Epoch())
 	}
 }
+
+// A Remove must name a leaf of the tree. An index that wraps around
+// to a member's leaf would remove that member under another name,
+// past the rule that a committer cannot remove itself.
+func TestCommitRemoveOutOfRange(t *testing.T) {
+	for _, removed := range []uint32{3, 1 << 31, 1<<31 + 1} {
+		a1, _, _ := threeMember(t)
+		ps := []*Proposal{{Type: ProposalTypeRemove, Remove: &Remove{Removed: removed}}}
+		if _, _, _, err := a1.Commit(ps); err != ErrLeafRange {
+			t.Errorf("Commit(remove %d) = %v, want %v", removed, err, ErrLeafRange)
+		}
+	}
+}
