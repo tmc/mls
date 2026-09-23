@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"sync"
 	"testing"
 )
 
@@ -377,6 +378,36 @@ func TestUnprotectRejects(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Encoding a message only reads it, so one message may be encoded
+// from several goroutines at once. Run under -race.
+func TestMarshalConcurrent(t *testing.T) {
+	a, _, _ := threeMember(t)
+	cs := a.CipherSuite
+	m, err := a.Propose(&Proposal{Type: ProposalTypeRemove, Remove: &Remove{Removed: 2}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := m.PublicMessage.AuthenticatedContent(cs, a.schedule.MembershipKey, &a.Context)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var wg sync.WaitGroup
+	for range 4 {
+		wg.Go(func() {
+			if _, err := Marshal(m); err != nil {
+				t.Error(err)
+			}
+			if _, err := Marshal(c); err != nil {
+				t.Error(err)
+			}
+			if _, err := cs.MembershipTag(a.schedule.MembershipKey, c, a.Context.Version, &a.Context); err != nil {
+				t.Error(err)
+			}
+		})
+	}
+	wg.Wait()
 }
 
 // Sender data that names a leaf no member occupies is refused before

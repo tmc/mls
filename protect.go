@@ -79,8 +79,7 @@ func (c *AuthenticatedContent) privateMessage(cs CipherSuite, r *ratchet, sender
 	}
 	plaintext, err := tlssyntax.Marshal(tlssyntax.MarshalerFunc(func(w *tlssyntax.Writer) {
 		c.Content.marshalBody(w)
-		c.Auth.ContentType = c.Content.ContentType
-		c.Auth.MarshalTLS(w)
+		c.Auth.marshal(w, c.Content.ContentType)
 	}))
 	if err != nil {
 		return nil, err

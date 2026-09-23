@@ -15,8 +15,7 @@ type AuthenticatedContent struct {
 func (c *AuthenticatedContent) MarshalTLS(w *tlssyntax.Writer) {
 	w.WriteUint16(uint16(c.WireFormat))
 	c.Content.MarshalTLS(w)
-	c.Auth.ContentType = c.Content.ContentType
-	c.Auth.MarshalTLS(w)
+	c.Auth.marshal(w, c.Content.ContentType)
 }
 
 func (c *AuthenticatedContent) UnmarshalTLS(r *tlssyntax.Reader) {

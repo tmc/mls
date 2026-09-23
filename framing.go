@@ -117,14 +117,21 @@ type FramedContentAuthData struct {
 }
 
 func (a *FramedContentAuthData) MarshalTLS(w *tlssyntax.Writer) {
+	a.marshal(w, a.ContentType)
+}
+
+// marshal writes a as the authentication of content of type ct,
+// whatever a.ContentType says. Callers that encode a together with
+// its content use it so that encoding never writes to a.
+func (a *FramedContentAuthData) marshal(w *tlssyntax.Writer, ct ContentType) {
 	w.WriteOpaque(a.Signature)
-	switch a.ContentType {
+	switch ct {
 	case ContentTypeCommit:
 		w.WriteOpaque(a.ConfirmationTag)
 	case ContentTypeApplication, ContentTypeProposal:
 		// no fields
 	default:
-		w.SetError(errUnknown("content type", uint64(a.ContentType)))
+		w.SetError(errUnknown("content type", uint64(ct)))
 	}
 }
 
@@ -153,8 +160,7 @@ type PublicMessage struct {
 
 func (m *PublicMessage) MarshalTLS(w *tlssyntax.Writer) {
 	m.Content.MarshalTLS(w)
-	m.Auth.ContentType = m.Content.ContentType
-	m.Auth.MarshalTLS(w)
+	m.Auth.marshal(w, m.Content.ContentType)
 	if m.Content.Sender.Type == SenderTypeMember {
 		w.WriteOpaque(m.MembershipTag)
 	}

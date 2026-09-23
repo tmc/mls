@@ -70,8 +70,7 @@ func (cs CipherSuite) MembershipTag(membershipKey []byte, content *Authenticated
 	}
 	b, err := tlssyntax.Marshal(tlssyntax.MarshalerFunc(func(w *tlssyntax.Writer) {
 		w.WriteRaw(tbs)
-		content.Auth.ContentType = content.Content.ContentType
-		content.Auth.MarshalTLS(w)
+		content.Auth.marshal(w, content.Content.ContentType)
 	}))
 	if err != nil {
 		return nil, err
