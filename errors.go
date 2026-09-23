@@ -86,6 +86,12 @@ var ErrBadUnmergedLeaves = errors.New("mls: malformed unmerged leaves")
 // always has at least one member, so an empty tree is malformed.
 var ErrEmptyTree = errors.New("mls: ratchet tree is empty")
 
+// ErrMalformedTree is reported for a ratchet tree whose array does not
+// have the shape of RFC 9420, Section 12.4.3.1: a leaf at an odd
+// index or a parent at an even one, a blank last node, or a node past
+// the width of the tree.
+var ErrMalformedTree = errors.New("mls: malformed ratchet tree")
+
 // ErrBadParentHash is reported when a parent node in a ratchet tree
 // cannot be chained back to a leaf by parent hashes, which means it
 // was not introduced by a member of the group.

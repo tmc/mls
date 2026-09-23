@@ -236,6 +236,9 @@ func (c *Client) join(w *Welcome, tree RatchetTree, old *Group) (*Group, error) 
 // verify checks a ratchet tree against the group context that
 // summarizes it, and against its own internal consistency.
 func (t RatchetTree) verify(cs CipherSuite, ctx *GroupContext) error {
+	if err := t.verifyShape(); err != nil {
+		return err
+	}
 	hash, err := t.RootHash(cs)
 	if err != nil {
 		return err

@@ -21,12 +21,18 @@ func (t RatchetTree) Size() LeafIndex {
 }
 
 // Node returns the node at x, or nil if it is blank or beyond the
-// trimmed end of the array.
+// trimmed end of the array. A node that is not the kind its position
+// requires, a leaf at an even index and a parent at an odd one, is
+// treated as blank, as the tree hash treats it.
 func (t RatchetTree) Node(x NodeIndex) *Node {
-	if int(x) < len(t) {
-		return t[x]
+	if int(x) >= len(t) {
+		return nil
 	}
-	return nil
+	n := t[x]
+	if n == nil || x.IsLeaf() && n.Leaf == nil || !x.IsLeaf() && n.Parent == nil {
+		return nil
+	}
+	return n
 }
 
 // Leaf returns the leaf node of the member at i, or nil if that leaf
@@ -243,6 +249,32 @@ func (t RatchetTree) parentHashOf(x NodeIndex) []byte {
 func leavesUnder(x NodeIndex) (first, last LeafIndex) {
 	mask := NodeIndex(1<<(x.level()+1) - 1)
 	return (x &^ mask).LeafIndex(), ((x | mask) - 1).LeafIndex()
+}
+
+// verifyShape checks that t has the shape of RFC 9420, Section
+// 12.4.3.1: every node the kind its position requires, the last node
+// not blank, and no node past the width of the tree. A received tree
+// is checked for this first, since everything else reads it through
+// that shape.
+func (t RatchetTree) verifyShape() error {
+	if len(t) == 0 {
+		return ErrEmptyTree
+	}
+	if len(t)%2 == 0 || t[len(t)-1] == nil {
+		return ErrMalformedTree
+	}
+	for i, n := range t {
+		if n == nil {
+			continue
+		}
+		leaf := NodeIndex(i).IsLeaf()
+		switch {
+		case leaf && (n.Type != NodeTypeLeaf || n.Leaf == nil || n.Parent != nil),
+			!leaf && (n.Type != NodeTypeParent || n.Parent == nil || n.Leaf != nil):
+			return ErrMalformedTree
+		}
+	}
+	return nil
 }
 
 // verifyNodeKeys checks that no encryption key appears at two nodes

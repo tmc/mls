@@ -348,3 +348,49 @@ func TestTreeOutOfRange(t *testing.T) {
 		}
 	}
 }
+
+// A received tree must have the shape of RFC 9420, Section 12.4.3.1.
+// A node of the wrong kind for its position is hashed as blank but
+// was read as occupied elsewhere, and a node past the width of the
+// tree is not hashed at all.
+func TestVerifyShape(t *testing.T) {
+	g := groupOf(t, 4)
+	if err := g.Tree.verify(g.CipherSuite, &g.Context); err != nil {
+		t.Fatalf("a legitimate tree was rejected: %v", err)
+	}
+	parent := func() *Node {
+		return &Node{Type: NodeTypeParent, Parent: &ParentNode{EncryptionKey: []byte("key")}}
+	}
+	for _, tt := range []struct {
+		name string
+		bad  func(RatchetTree) RatchetTree
+		want error
+	}{
+		{"empty", func(RatchetTree) RatchetTree { return nil }, ErrEmptyTree},
+		{"leaf at a parent index", func(tr RatchetTree) RatchetTree {
+			tr[5] = &Node{Type: NodeTypeLeaf, Leaf: tr.Leaf(1)}
+			return tr
+		}, ErrMalformedTree},
+		{"parent at a leaf index", func(tr RatchetTree) RatchetTree {
+			tr[2] = parent()
+			return tr
+		}, ErrMalformedTree},
+		{"type disagrees with contents", func(tr RatchetTree) RatchetTree {
+			tr[0].Type = NodeTypeParent
+			return tr
+		}, ErrMalformedTree},
+		{"blank last node", func(tr RatchetTree) RatchetTree {
+			return append(tr, nil, nil)
+		}, ErrMalformedTree},
+		{"even length", func(tr RatchetTree) RatchetTree {
+			return append(tr, parent())
+		}, ErrMalformedTree},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			tr := tt.bad(g.Tree.Clone())
+			if err := tr.verify(g.CipherSuite, &g.Context); err != tt.want {
+				t.Errorf("verify = %v, want %v", err, tt.want)
+			}
+		})
+	}
+}
