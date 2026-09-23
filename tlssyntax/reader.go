@@ -1,6 +1,7 @@
 package tlssyntax
 
 import (
+	"encoding/binary"
 	"errors"
 	"fmt"
 )
@@ -103,7 +104,7 @@ func (r *Reader) ReadUint16() uint16 {
 	if b == nil {
 		return 0
 	}
-	return uint16(b[0])<<8 | uint16(b[1])
+	return binary.BigEndian.Uint16(b)
 }
 
 // ReadUint32 reads four bytes in network byte order.
@@ -112,7 +113,7 @@ func (r *Reader) ReadUint32() uint32 {
 	if b == nil {
 		return 0
 	}
-	return uint32(b[0])<<24 | uint32(b[1])<<16 | uint32(b[2])<<8 | uint32(b[3])
+	return binary.BigEndian.Uint32(b)
 }
 
 // ReadUint64 reads eight bytes in network byte order.
@@ -121,11 +122,7 @@ func (r *Reader) ReadUint64() uint64 {
 	if b == nil {
 		return 0
 	}
-	v := uint64(0)
-	for _, c := range b {
-		v = v<<8 | uint64(c)
-	}
-	return v
+	return binary.BigEndian.Uint64(b)
 }
 
 // ReadRaw reads n bytes with no length header. The returned slice

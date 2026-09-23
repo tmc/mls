@@ -1,5 +1,7 @@
 package tlssyntax
 
+import "encoding/binary"
+
 // MaxVectorLen is the largest length a variable-size vector header can
 // encode. See RFC 9420, Section 2.1.2.
 const MaxVectorLen = 1<<30 - 1
@@ -15,8 +17,8 @@ func appendVarint(b []byte, v uint64) []byte {
 	case v < 1<<6:
 		return append(b, byte(v))
 	case v < 1<<14:
-		return append(b, byte(v>>8)|0x40, byte(v))
+		return binary.BigEndian.AppendUint16(b, 0x4000|uint16(v))
 	default:
-		return append(b, byte(v>>24)|0x80, byte(v>>16), byte(v>>8), byte(v))
+		return binary.BigEndian.AppendUint32(b, 0x80000000|uint32(v))
 	}
 }

@@ -1,6 +1,7 @@
 package tlssyntax
 
 import (
+	"encoding/binary"
 	"errors"
 	"fmt"
 )
@@ -64,23 +65,21 @@ func (w *Writer) WriteUint8(v uint8) {
 // WriteUint16 writes v in network byte order.
 func (w *Writer) WriteUint16(v uint16) {
 	if w.err == nil {
-		w.buf = append(w.buf, byte(v>>8), byte(v))
+		w.buf = binary.BigEndian.AppendUint16(w.buf, v)
 	}
 }
 
 // WriteUint32 writes v in network byte order.
 func (w *Writer) WriteUint32(v uint32) {
 	if w.err == nil {
-		w.buf = append(w.buf, byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
+		w.buf = binary.BigEndian.AppendUint32(w.buf, v)
 	}
 }
 
 // WriteUint64 writes v in network byte order.
 func (w *Writer) WriteUint64(v uint64) {
 	if w.err == nil {
-		w.buf = append(w.buf,
-			byte(v>>56), byte(v>>48), byte(v>>40), byte(v>>32),
-			byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
+		w.buf = binary.BigEndian.AppendUint64(w.buf, v)
 	}
 }
 

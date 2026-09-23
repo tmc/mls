@@ -227,7 +227,7 @@ func TestErrorIsSticky(t *testing.T) {
 	if !v.Empty() || !r.Empty() {
 		t.Error("readers not empty after error")
 	}
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		r.ReadUint32()
 		r.ReadOpaque()
 		r.ReadVarint()
