@@ -104,6 +104,13 @@ func TestCredential(t *testing.T) {
 			if err := back.Verify(signatureKey, supported); err != nil {
 				t.Errorf("Verify of supported bindings only: %v", err)
 			}
+
+			// Supporting no binding at all verifies nothing, which
+			// must not pass for success.
+			none := func(*multicred.Binding) bool { return false }
+			if err := back.Verify(signatureKey, none); !errors.Is(err, multicred.ErrNoneVerified) {
+				t.Errorf("Verify with no supported bindings: %v, want %v", err, multicred.ErrNoneVerified)
+			}
 		})
 	}
 }

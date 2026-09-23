@@ -187,10 +187,12 @@ func (c *Credential) UnmarshalTLS(r *tlssyntax.Reader) {
 // which those are; the others are left to members that do support
 // them. See draft-ietf-mls-extensions, Section 6.5.2.
 //
-// Verify can therefore succeed without checking anything: a weak
-// multi-credential none of whose bindings are supported returns nil.
-// A caller that needs at least one binding checked, or that requires
-// a particular shape - one binding, a basic inner credential, an
+// If supported rejects every binding, Verify has checked nothing and
+// returns [ErrNoneVerified]: the draft requires each member to
+// support at least one binding of a weak multi-credential.
+//
+// Verify checks only the signatures. A caller that requires a
+// particular shape - one binding, a basic inner credential, an
 // identity equal to the credential key - must require it itself,
 // before or after calling Verify. Nothing here can know those rules.
 func (c *Credential) Verify(signatureKey mls.SignaturePublicKey, supported func(*Binding) bool) error {
@@ -200,6 +202,7 @@ func (c *Credential) Verify(signatureKey mls.SignaturePublicKey, supported func(
 	if len(c.Bindings) > MaxBindings {
 		return ErrTooManyBindings
 	}
+	verified := 0
 	for i := range c.Bindings {
 		b := &c.Bindings[i]
 		if isMulti(b.Credential.Type) {
@@ -214,6 +217,10 @@ func (c *Credential) Verify(signatureKey mls.SignaturePublicKey, supported func(
 		if err := b.Verify(signatureKey); err != nil {
 			return err
 		}
+		verified++
+	}
+	if verified == 0 {
+		return ErrNoneVerified
 	}
 	return nil
 }

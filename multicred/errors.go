@@ -17,3 +17,7 @@ var ErrNested = errors.New("multicred: binding holds a multi-credential")
 // ErrTooManyBindings is reported for a multi-credential with more
 // than [MaxBindings] bindings.
 var ErrTooManyBindings = errors.New("multicred: too many bindings")
+
+// ErrNoneVerified is reported when a weak multi-credential is
+// verified but none of its bindings is one the caller supports.
+var ErrNoneVerified = errors.New("multicred: no supported binding to verify")
