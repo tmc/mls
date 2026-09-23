@@ -2,6 +2,7 @@ package mls
 
 import (
 	"bytes"
+	"fmt"
 )
 
 // JoinExternal joins a group from a GroupInfo, without being added by
@@ -84,7 +85,8 @@ func (c *Client) JoinExternal(info *GroupInfo, tree RatchetTree) (*Group, *Messa
 	// A member rejoining after losing its state removes its own
 	// prior leaf in the same commit, which RFC 9420, Section
 	// 12.4.3.2 calls a resync. The prior leaf is the one holding
-	// the same signature key.
+	// the same signature key, and must present the same
+	// credential.
 	for i, l := range tree.Members() {
 		if bytes.Equal(l.SignatureKey, leaf.SignatureKey) {
 			proposals = append(proposals, &Proposal{Type: ProposalTypeRemove, Remove: &Remove{Removed: uint32(i)}})
@@ -100,16 +102,13 @@ func (c *Client) JoinExternal(info *GroupInfo, tree RatchetTree) (*Group, *Messa
 // externalCommitOK checks the rules a commit from a new member must
 // meet: it carries an update path, and the rules on its proposals
 // below. See RFC 9420, Section 12.4.3.2.
-func externalCommitOK(commit *Commit) error {
+func (t RatchetTree) externalCommitOK(commit *Commit, ctx *GroupContext) error {
 	if commit.Path == nil {
 		return ErrBadExternalCommit
 	}
-	return externalProposalsOK(commit)
+	return t.externalProposalsOK(commit, &commit.Path.LeafNode.Credential, ctx)
 }
 
-// externalProposalsOK checks the proposals of a commit from a new
-// member: exactly one ExternalInit, nothing by reference, and nothing
-// but Remove and PreSharedKey besides.
 // externalProposalType reports whether a party outside the group may
 // send a proposal of this type. See RFC 9420, Section 12.1.8.
 func externalProposalType(t ProposalType) bool {
@@ -121,8 +120,20 @@ func externalProposalType(t ProposalType) bool {
 	return false
 }
 
-func externalProposalsOK(commit *Commit) error {
-	n := 0
+// externalProposalsOK checks the proposals of a commit from a new
+// member that presents the credential cred: exactly one ExternalInit,
+// nothing by reference, and nothing but PreSharedKeys and at most one
+// Remove besides. The Remove may only be of the joiner's own earlier
+// leaf, which is the resync of RFC 9420, Section 12.4.3.2; this
+// package takes that to mean a leaf presenting the same credential,
+// as [Client.Resume] does for a branch.
+func (t RatchetTree) externalProposalsOK(commit *Commit, cred *Credential, ctx *GroupContext) error {
+	want, err := Marshal(cred)
+	if err != nil {
+		return err
+	}
+	inits, removes := 0, 0
+	psks := make(map[string]bool)
 	for _, p := range commit.Proposals {
 		// A new member cannot judge the proposals a group has
 		// sent, so it may not commit any of them by reference.
@@ -131,13 +142,40 @@ func externalProposalsOK(commit *Commit) error {
 		}
 		switch p.Proposal.Type {
 		case ProposalTypeExternalInit:
-			n++
-		case ProposalTypeRemove, ProposalTypePreSharedKey:
+			inits++
+		case ProposalTypeRemove:
+			if removes++; removes > 1 {
+				return fmt.Errorf("%w: more than one remove", ErrBadExternalCommit)
+			}
+			leaf := t.Leaf(LeafIndex(p.Proposal.Remove.Removed))
+			if leaf == nil {
+				return ErrLeafRange
+			}
+			got, err := Marshal(&leaf.Credential)
+			if err != nil {
+				return err
+			}
+			if !bytes.Equal(got, want) {
+				return fmt.Errorf("%w: remove of another member", ErrBadExternalCommit)
+			}
+		case ProposalTypePreSharedKey:
+			id := &p.Proposal.PreSharedKey.PSK
+			if err := checkPSK(id, ctx); err != nil {
+				return err
+			}
+			b, err := Marshal(id)
+			if err != nil {
+				return err
+			}
+			if psks[string(b)] {
+				return fmt.Errorf("%w: two proposals for the same pre-shared key", ErrProposalList)
+			}
+			psks[string(b)] = true
 		default:
 			return ErrBadExternalCommit
 		}
 	}
-	if n != 1 {
+	if inits != 1 {
 		return ErrBadExternalCommit
 	}
 	return nil

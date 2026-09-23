@@ -511,7 +511,7 @@ func (g *Group) ApplyCommit(c *AuthenticatedContent) (*Group, error) {
 	commit := c.Content.Commit
 	external := c.Content.Sender.Type == SenderTypeNewMemberCommit
 	if external {
-		if err := externalCommitOK(commit); err != nil {
+		if err := g.Tree.externalCommitOK(commit, &g.Context); err != nil {
 			return nil, err
 		}
 	}

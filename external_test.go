@@ -136,29 +136,41 @@ func members(t RatchetTree) int {
 	return n
 }
 
+// TestExternalCommitRules checks the rules of RFC 9420, Section
+// 12.4.3.2 on the proposals of an external commit.
 func TestExternalCommitRules(t *testing.T) {
-	kp := &KeyPackage{}
+	a, b, c := threeMember(t)
+	bob := &UpdatePath{LeafNode: *b.Tree.Leaf(b.Index)}
+	inline := func(p *Proposal) ProposalOrRef {
+		return ProposalOrRef{Type: ProposalOrRefTypeProposal, Proposal: p}
+	}
+	ei := inline(&Proposal{Type: ProposalTypeExternalInit, ExternalInit: &ExternalInit{}})
+	remove := func(i LeafIndex) ProposalOrRef {
+		return inline(&Proposal{Type: ProposalTypeRemove, Remove: &Remove{Removed: uint32(i)}})
+	}
+	psk := inline(externalPSK("k"))
 	for _, tc := range []struct {
 		name   string
 		commit Commit
+		want   error
 	}{
-		{"no path", Commit{Proposals: []ProposalOrRef{{Type: ProposalOrRefTypeProposal, Proposal: &Proposal{Type: ProposalTypeExternalInit, ExternalInit: &ExternalInit{}}}}}},
-		{"no external init", Commit{Path: &UpdatePath{}}},
-		{"two external inits", Commit{Path: &UpdatePath{}, Proposals: []ProposalOrRef{
-			{Type: ProposalOrRefTypeProposal, Proposal: &Proposal{Type: ProposalTypeExternalInit, ExternalInit: &ExternalInit{}}},
-			{Type: ProposalOrRefTypeProposal, Proposal: &Proposal{Type: ProposalTypeExternalInit, ExternalInit: &ExternalInit{}}},
-		}}},
-		{"by reference", Commit{Path: &UpdatePath{}, Proposals: []ProposalOrRef{
-			{Type: ProposalOrRefTypeProposal, Proposal: &Proposal{Type: ProposalTypeExternalInit, ExternalInit: &ExternalInit{}}},
-			{Type: ProposalOrRefTypeReference, Reference: []byte("ref")},
-		}}},
-		{"add", Commit{Path: &UpdatePath{}, Proposals: []ProposalOrRef{
-			{Type: ProposalOrRefTypeProposal, Proposal: &Proposal{Type: ProposalTypeExternalInit, ExternalInit: &ExternalInit{}}},
-			{Type: ProposalOrRefTypeProposal, Proposal: &Proposal{Type: ProposalTypeAdd, Add: &Add{KeyPackage: *kp}}},
-		}}},
+		{"no path", Commit{Proposals: []ProposalOrRef{ei}}, ErrBadExternalCommit},
+		{"no external init", Commit{Path: bob}, ErrBadExternalCommit},
+		{"two external inits", Commit{Path: bob, Proposals: []ProposalOrRef{ei, ei}}, ErrBadExternalCommit},
+		{"by reference", Commit{Path: bob, Proposals: []ProposalOrRef{
+			ei, {Type: ProposalOrRefTypeReference, Reference: []byte("ref")},
+		}}, ErrBadExternalCommit},
+		{"add", Commit{Path: bob, Proposals: []ProposalOrRef{
+			ei, inline(&Proposal{Type: ProposalTypeAdd, Add: &Add{}}),
+		}}, ErrBadExternalCommit},
+		{"two removes", Commit{Path: bob, Proposals: []ProposalOrRef{ei, remove(b.Index), remove(c.Index)}}, ErrBadExternalCommit},
+		{"remove of another member", Commit{Path: bob, Proposals: []ProposalOrRef{ei, remove(c.Index)}}, ErrBadExternalCommit},
+		{"remove of a blank leaf", Commit{Path: bob, Proposals: []ProposalOrRef{ei, remove(3)}}, ErrLeafRange},
+		{"same pre-shared key twice", Commit{Path: bob, Proposals: []ProposalOrRef{ei, psk, psk}}, ErrProposalList},
+		{"resync", Commit{Path: bob, Proposals: []ProposalOrRef{ei, remove(b.Index), psk}}, nil},
 	} {
-		if err := externalCommitOK(&tc.commit); !errors.Is(err, ErrBadExternalCommit) {
-			t.Errorf("%s: got %v, want %v", tc.name, err, ErrBadExternalCommit)
+		if err := a.Tree.externalCommitOK(&tc.commit, &a.Context); !errors.Is(err, tc.want) {
+			t.Errorf("%s: got %v, want %v", tc.name, err, tc.want)
 		}
 	}
 }
