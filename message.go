@@ -128,8 +128,8 @@ func (m *Welcome) UnmarshalTLS(r *tlssyntax.Reader) {
 }
 
 // A GroupInfo tells a joining member the state of the group. It is
-// signed by an existing member, named by Signer, over a GroupInfoTBS,
-// which this package does not yet construct.
+// signed by an existing member, named by Signer, over a GroupInfoTBS;
+// see [GroupInfo.Sign] and [GroupInfo.Verify].
 // See RFC 9420, Section 12.4.3.
 type GroupInfo struct {
 	GroupContext    GroupContext

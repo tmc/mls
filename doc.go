@@ -31,8 +31,8 @@
 // machine. RFC 9420, Section 14 requires that generating a commit not
 // modify the client's state, since the delivery service may accept a
 // different commit for the same epoch; this package enforces that by
-// construction, because a [Group] is one epoch's state and is never
-// modified. A client generates its keys with [NewClient] and either
+// construction, because a [Group] is one epoch's state and a commit
+// never modifies it. A client generates its keys with [NewClient] and either
 // starts a group with [Client.NewGroup] or joins one from a welcome
 // message with [Client.Join], or from a GroupInfo alone with
 // [Client.JoinExternal], which is the external commit of Section 8.3.
@@ -50,7 +50,10 @@
 // Processing a commit does not change the group it applies to:
 // [Group.Commit] and [Group.Handle] return the group's state in the
 // epoch that the commit begins, so a caller that has not yet
-// confirmed a commit can keep using the epoch it has.
+// confirmed a commit can keep using the epoch it has. Within an
+// epoch, though, a Group is not immutable: protecting and
+// unprotecting messages advance its ratchets and proposals are
+// recorded in it, so a Group is not safe for concurrent use.
 //
 //	alice, err := mls.NewClient(cs, cred, 24*time.Hour)
 //	g, err := alice.NewGroup(groupID, nil)

@@ -66,8 +66,8 @@ func (l *Lifetime) UnmarshalTLS(r *tlssyntax.Reader) {
 }
 
 // A LeafNode describes one member's appearance in the ratchet tree. It
-// is signed by that member over a LeafNodeTBS, which this package does
-// not yet construct.
+// is signed by that member over a LeafNodeTBS; see [LeafNode.Sign] and
+// [LeafNode.Verify].
 //
 // Source decides which of Lifetime and ParentHash is present: a leaf
 // from a [KeyPackage] carries a Lifetime, a leaf installed by a commit

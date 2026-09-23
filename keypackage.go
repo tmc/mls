@@ -5,8 +5,8 @@ import "github.com/tmc/mls/tlssyntax"
 // A KeyPackage offers a client for addition to a group: it publishes
 // the client's leaf node along with an init key that an adder uses to
 // encrypt the group's secrets to it. A key package is meant to be used
-// once. It is signed by the client over a KeyPackageTBS, which this
-// package does not yet construct.
+// once. It is signed by the client over a KeyPackageTBS; see
+// [KeyPackage.Sign] and [KeyPackage.Verify].
 // See RFC 9420, Section 10.
 type KeyPackage struct {
 	Version     ProtocolVersion

@@ -46,9 +46,22 @@ type Client struct {
 	Padding int
 }
 
-// A Group is a member's view of an MLS group at one epoch. Processing
-// a commit does not change a Group; it returns the group's state in
-// the epoch that the commit begins.
+// A Group is a member's view of an MLS group at one epoch.
+//
+// A commit does not change a Group: [Group.Commit],
+// [Group.ApplyCommit] and a [Group.Handle] of a commit return the
+// group's state in the epoch the commit begins, and leave g as it
+// was. The old Group remains usable for its own epoch, to decrypt
+// messages that arrive late or to try again if the delivery service
+// rejects the commit; a caller drops it once it no longer needs it,
+// since it holds that epoch's secrets.
+//
+// Within an epoch a Group does change. [Group.Protect] and
+// [Group.Unprotect] advance the secret tree's ratchets, and
+// [Group.Propose], [Group.ProposeUpdate], [Group.AddProposal] and a
+// [Group.Handle] of a proposal record the proposal. A Group is
+// therefore not safe for concurrent use; a caller that shares one
+// between goroutines must serialize its calls.
 type Group struct {
 	CipherSuite CipherSuite
 	Context     GroupContext
@@ -284,7 +297,9 @@ func (c *Client) pskSecret(ids []PreSharedKeyID, g *Group) ([]byte, error) {
 
 // Unprotect recovers the authenticated content of a message sent to
 // the group, checking that it comes from a member of this epoch and
-// uses the group's protocol version.
+// uses the group's protocol version. Decrypting a private message
+// advances the sender's ratchet in g past the message's generation,
+// so the same private message cannot be unprotected twice.
 func (g *Group) Unprotect(m *Message) (*AuthenticatedContent, error) {
 	cs := g.CipherSuite
 	var (
@@ -373,7 +388,8 @@ func (g *Group) Unprotect(m *Message) (*AuthenticatedContent, error) {
 }
 
 // Protect frames application data as a private message of this epoch,
-// padded as the client's [Client.Padding] asks.
+// padded as the client's [Client.Padding] asks. It advances the
+// member's own application ratchet in g.
 func (g *Group) Protect(authenticatedData, plaintext []byte) (*Message, error) {
 	cs := g.CipherSuite
 	c := &AuthenticatedContent{
@@ -407,10 +423,11 @@ func (g *Group) Protect(authenticatedData, plaintext []byte) (*Message, error) {
 // and every committer consider.
 const maxProposals = 1024
 
-// Handle processes a handshake message. A proposal is remembered
-// until a commit refers to it, and Handle returns g unchanged; a
-// commit ends the epoch, and Handle returns the group's state in the
-// next one.
+// Handle processes a handshake message, and is how a member follows
+// the group. A proposal is remembered in g until a commit refers to
+// it, and Handle returns g itself; a commit ends the epoch, and
+// Handle returns the group's state in the next one, leaving g as it
+// was.
 func (g *Group) Handle(m *Message) (*Group, error) {
 	c, err := g.Unprotect(m)
 	if err != nil {
@@ -429,7 +446,10 @@ func (g *Group) Handle(m *Message) (*Group, error) {
 }
 
 // AddProposal remembers a proposal so that a later commit can refer
-// to it by reference.
+// to it by reference. [Group.Handle] calls it for a proposal message;
+// call it directly only for a proposal whose content was already
+// recovered and authenticated some other way, such as by
+// [Group.Unprotect].
 //
 // A proposal from outside the group, whether from an external sender
 // or from a client asking to be added, is remembered only if the
@@ -529,6 +549,10 @@ func (g *Group) resolve(commit *Commit, committer Sender) ([]proposal, error) {
 
 // ApplyCommit applies a commit sent in this epoch and returns the
 // group's state in the epoch the commit begins. g is left unchanged.
+// [Group.Handle] calls it for a commit message; call it directly only
+// for a commit whose content was already recovered and authenticated
+// some other way, such as by [Group.Unprotect], for example to
+// inspect the commit before applying it.
 // See RFC 9420, Section 12.4.2.
 func (g *Group) ApplyCommit(c *AuthenticatedContent) (*Group, error) {
 	if g.reinit != nil {

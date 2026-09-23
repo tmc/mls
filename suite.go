@@ -345,10 +345,9 @@ func (cs CipherSuite) AEADNonceSize() int {
 	return p.nonceSize
 }
 
-// AEAD returns the cipher suite's AEAD keyed with key. Cipher suites
-// whose AEAD is ChaCha20-Poly1305 report ErrUnsupportedCipherSuite:
-// the Go standard library exposes that construction only through
-// crypto/hpke.
+// AEAD returns the cipher suite's AEAD keyed with key: AES-GCM, or
+// ChaCha20-Poly1305 from golang.org/x/crypto, since the standard
+// library exposes that construction only through crypto/hpke.
 func (cs CipherSuite) AEAD(key []byte) (cipher.AEAD, error) {
 	p, err := cs.params()
 	if err != nil {

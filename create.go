@@ -177,10 +177,12 @@ func (g *Group) ProposeUpdate(leaf *LeafNode, encPriv []byte) (*Message, error) 
 // Commit ends the epoch. It applies the extra proposals, which are
 // carried in the commit itself, along with the proposals g has seen
 // in this epoch that are valid and that can be committed with them;
-// the others are left out. An invalid extra proposal is an error. It returns the group's state in the new epoch, the
-// commit to send to the other members, and a welcome for the members
-// the commit adds, which is nil if it adds none. g is left unchanged,
-// and remains usable until the commit is confirmed.
+// the others are left out. An invalid extra proposal is an error.
+// It returns the group's state in the new epoch, the commit to send
+// to the other members, and a welcome for the members the commit
+// adds, which is nil if it adds none. g is left unchanged, so that
+// if the delivery service accepts a different commit for this epoch
+// the member can apply that one instead. See RFC 9420, Section 14.
 //
 // The commit always updates the committer's direct path, which RFC
 // 9420, Section 12.4 requires unless every proposal is an Add.
