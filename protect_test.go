@@ -322,6 +322,63 @@ func TestForgedSignatureDoesNotSpendKeys(t *testing.T) {
 	}
 }
 
+func TestUnprotectRejects(t *testing.T) {
+	a, b, _ := threeMember(t)
+	cs := b.CipherSuite
+
+	// Application data in the clear, correctly signed and tagged.
+	clear := &AuthenticatedContent{
+		WireFormat: WireFormatPublicMessage,
+		Content: FramedContent{
+			GroupID:         b.Context.GroupID,
+			Epoch:           b.Context.Epoch,
+			Sender:          Sender{Type: SenderTypeMember, LeafIndex: uint32(b.Index)},
+			ContentType:     ContentTypeApplication,
+			ApplicationData: []byte("hello"),
+		},
+	}
+	if err := clear.Sign(cs, b.client.SignaturePriv, b.Context.Version, &b.Context); err != nil {
+		t.Fatal(err)
+	}
+	tag, err := cs.MembershipTag(b.schedule.MembershipKey, clear, b.Context.Version, &b.Context)
+	if err != nil {
+		t.Fatal(err)
+	}
+	public := &Message{
+		Version:       b.Context.Version,
+		WireFormat:    WireFormatPublicMessage,
+		PublicMessage: &PublicMessage{Content: clear.Content, Auth: clear.Auth, MembershipTag: tag},
+	}
+
+	private := func() *Message {
+		m, err := b.Protect(nil, []byte("hello"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return m
+	}
+	version := private()
+	version.Version = 0xff
+	wire := private()
+	wire.WireFormat = WireFormatPublicMessage
+
+	for _, tt := range []struct {
+		name string
+		m    *Message
+		want error
+	}{
+		{"public application", send(t, public), ErrApplicationNotEncrypted},
+		{"version", send(t, version), ErrUnsupportedVersion},
+		{"wire format", wire, ErrNotForGroup},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, err := a.Unprotect(tt.m); !errors.Is(err, tt.want) {
+				t.Errorf("Unprotect = %v, want %v", err, tt.want)
+			}
+		})
+	}
+}
+
 // Sender data that names a leaf no member occupies is refused before
 // any key of that leaf is derived. See RFC 9420, Section 6.3.2.
 func TestSenderDataBlankLeaf(t *testing.T) {

@@ -28,9 +28,14 @@ func (c *AuthenticatedContent) PublicMessage(cs CipherSuite, membershipKey []byt
 }
 
 // AuthenticatedContent recovers the content of a public message,
-// checking the membership tag if there is one. The caller must still
-// verify the signature; see [AuthenticatedContent.Verify].
+// checking the membership tag if there is one. It refuses application
+// data, which may be sent only as a PrivateMessage. The caller must
+// still verify the signature; see [AuthenticatedContent.Verify].
+// See RFC 9420, Section 6.2.
 func (m *PublicMessage) AuthenticatedContent(cs CipherSuite, membershipKey []byte, ctx *GroupContext) (*AuthenticatedContent, error) {
+	if m.Content.ContentType == ContentTypeApplication {
+		return nil, ErrApplicationNotEncrypted
+	}
 	c := &AuthenticatedContent{WireFormat: WireFormatPublicMessage, Content: m.Content, Auth: m.Auth}
 	c.Auth.ContentType = m.Content.ContentType
 	if m.Content.Sender.Type != SenderTypeMember {

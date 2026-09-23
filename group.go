@@ -240,7 +240,8 @@ func (c *Client) pskSecret(ids []PreSharedKeyID, g *Group) ([]byte, error) {
 }
 
 // Unprotect recovers the authenticated content of a message sent to
-// the group, checking that it comes from a member of this epoch.
+// the group, checking that it comes from a member of this epoch and
+// uses the group's protocol version.
 func (g *Group) Unprotect(m *Message) (*AuthenticatedContent, error) {
 	cs := g.CipherSuite
 	var (
@@ -248,11 +249,14 @@ func (g *Group) Unprotect(m *Message) (*AuthenticatedContent, error) {
 		advance func()
 		err     error
 	)
-	public := m.PublicMessage != nil
+	if m.Version != g.Context.Version {
+		return nil, ErrUnsupportedVersion
+	}
+	public := m.WireFormat == WireFormatPublicMessage
 	switch {
-	case public:
+	case public && m.PublicMessage != nil:
 		c, err = m.PublicMessage.AuthenticatedContent(cs, g.schedule.MembershipKey, &g.Context)
-	case m.PrivateMessage != nil:
+	case m.WireFormat == WireFormatPrivateMessage && m.PrivateMessage != nil:
 		pm := m.PrivateMessage
 		data, err := pm.openSenderData(cs, g.schedule.SenderDataSecret)
 		if err != nil {
