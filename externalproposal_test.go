@@ -177,8 +177,12 @@ func TestExternalProposalPolicy(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if _, err := a.Handle(send(t, ask)); !errors.Is(err, tt.want) {
+			g, err := a.Handle(send(t, ask))
+			if !errors.Is(err, tt.want) {
 				t.Fatalf("Handle = %v, want %v", err, tt.want)
+			}
+			if err != nil && g != nil {
+				t.Error("Handle returned a group along with an error")
 			}
 			a2, _, _, err := a.Commit(nil)
 			if err != nil {

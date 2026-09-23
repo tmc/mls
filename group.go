@@ -388,7 +388,10 @@ func (g *Group) Handle(m *Message) (*Group, error) {
 	}
 	switch c.Content.ContentType {
 	case ContentTypeProposal:
-		return g, g.AddProposal(c)
+		if err := g.AddProposal(c); err != nil {
+			return nil, err
+		}
+		return g, nil
 	case ContentTypeCommit:
 		return g.ApplyCommit(c)
 	}
