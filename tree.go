@@ -127,8 +127,19 @@ func (t RatchetTree) Resolution(x NodeIndex) []NodeIndex {
 // TreeHash returns the tree hash of the subtree headed by x, which
 // summarizes everything below it. See RFC 9420, Section 7.8.
 func (t RatchetTree) TreeHash(cs CipherSuite, x NodeIndex) ([]byte, error) {
+	return t.treeHash(cs, x, nil)
+}
+
+// treeHash is the tree hash of the subtree headed by x in t with each
+// of the leaves in without blanked and removed from every
+// unmerged_leaves list, which is the tree in which a parent hash's
+// sibling tree hash is computed. See RFC 9420, Section 7.9.
+func (t RatchetTree) treeHash(cs CipherSuite, x NodeIndex, without []uint32) ([]byte, error) {
 	if x.IsLeaf() {
 		leaf := t.Leaf(x.LeafIndex())
+		if slices.Contains(without, uint32(x.LeafIndex())) {
+			leaf = nil
+		}
 		b, err := tlssyntax.Marshal(tlssyntax.MarshalerFunc(func(w *tlssyntax.Writer) {
 			w.WriteUint8(uint8(NodeTypeLeaf))
 			w.WriteUint32(uint32(x.LeafIndex()))
@@ -143,17 +154,23 @@ func (t RatchetTree) TreeHash(cs CipherSuite, x NodeIndex) ([]byte, error) {
 		}
 		return cs.Hash(b)
 	}
-	left, err := t.TreeHash(cs, x.left())
+	left, err := t.treeHash(cs, x.left(), without)
 	if err != nil {
 		return nil, err
 	}
-	right, err := t.TreeHash(cs, x.right())
+	right, err := t.treeHash(cs, x.right(), without)
 	if err != nil {
 		return nil, err
 	}
 	var parent *ParentNode
 	if n := t.Node(x); n != nil {
 		parent = n.Parent
+	}
+	excluded := func(l uint32) bool { return slices.Contains(without, l) }
+	if parent != nil && slices.ContainsFunc(parent.UnmergedLeaves, excluded) {
+		p := *parent
+		p.UnmergedLeaves = slices.DeleteFunc(slices.Clone(p.UnmergedLeaves), excluded)
+		parent = &p
 	}
 	b, err := tlssyntax.Marshal(tlssyntax.MarshalerFunc(func(w *tlssyntax.Writer) {
 		w.WriteUint8(uint8(NodeTypeParent))
@@ -180,32 +197,6 @@ func (t RatchetTree) RootHash(cs CipherSuite) ([]byte, error) {
 	return t.TreeHash(cs, root(t.Size()))
 }
 
-// withoutLeaves returns a copy of t with each of the given leaves
-// blanked and removed from every unmerged leaf list. This is the
-// "original" tree in which a parent hash's sibling tree hash is
-// computed. See RFC 9420, Section 7.9.
-func (t RatchetTree) withoutLeaves(leaves []uint32) RatchetTree {
-	out := make(RatchetTree, len(t))
-	for i, n := range t {
-		x := NodeIndex(i)
-		switch {
-		case n == nil:
-			// already blank
-		case n.Leaf != nil:
-			if !slices.Contains(leaves, uint32(x.LeafIndex())) {
-				out[i] = n
-			}
-		case n.Parent != nil:
-			p := *n.Parent
-			p.UnmergedLeaves = slices.DeleteFunc(slices.Clone(p.UnmergedLeaves), func(l uint32) bool {
-				return slices.Contains(leaves, l)
-			})
-			out[i] = &Node{Type: NodeTypeParent, Parent: &p}
-		}
-	}
-	return out
-}
-
 // ParentHash returns the parent hash of the non-blank parent node p
 // with copath child s, the summary that a node below p records to
 // attest that p was set by a member of the group.
@@ -215,7 +206,7 @@ func (t RatchetTree) ParentHash(cs CipherSuite, p, s NodeIndex) ([]byte, error) 
 	if node == nil || node.Parent == nil {
 		return nil, ErrBlankParent
 	}
-	sibHash, err := t.withoutLeaves(node.Parent.UnmergedLeaves).TreeHash(cs, s)
+	sibHash, err := t.treeHash(cs, s, node.Parent.UnmergedLeaves)
 	if err != nil {
 		return nil, err
 	}

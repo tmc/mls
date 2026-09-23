@@ -223,3 +223,46 @@ func BenchmarkTreeHash(b *testing.B) {
 		})
 	}
 }
+
+// benchTree returns a tree of n members in which every parent node is
+// populated, as it is in a group whose members have all committed:
+// each even leaf commits in turn. Only the tree is built, not the
+// group, which at these sizes would cost minutes to set up.
+func benchTree(b *testing.B, cs CipherSuite, n int) RatchetTree {
+	b.Helper()
+	c := newTestClient(b, cs, "member")
+	var tr RatchetTree
+	for range n {
+		leaf := c.KeyPackage.LeafNode
+		tr.Add(&leaf)
+	}
+	ctx := &GroupContext{Version: Version10, CipherSuite: cs, GroupID: []byte("group")}
+	secret := make([]byte, cs.HashSize())
+	for i := 0; i < n; i += 2 {
+		secret[0], secret[1] = byte(i), byte(i>>8)
+		if _, _, _, err := tr.CreateUpdatePath(cs, LeafIndex(i), secret, c.SignaturePriv, ctx, nil); err != nil {
+			b.Fatal(err)
+		}
+	}
+	if err := tr.VerifyParentHashes(cs); err != nil {
+		b.Fatal(err)
+	}
+	return tr
+}
+
+// BenchmarkVerifyParentHashes measures the parent hash check a joiner
+// runs over a tree whose parent nodes are all populated.
+func BenchmarkVerifyParentHashes(b *testing.B) {
+	cs := X25519AES128GCMSHA256Ed25519
+	for _, n := range []int{64, 1024} {
+		b.Run(fmt.Sprint(n), func(b *testing.B) {
+			tr := benchTree(b, cs, n)
+			b.ReportAllocs()
+			for b.Loop() {
+				if err := tr.VerifyParentHashes(cs); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
+}

@@ -3,6 +3,7 @@ package mls
 import (
 	"bytes"
 	"errors"
+	"slices"
 	"testing"
 )
 
@@ -172,5 +173,27 @@ func TestExternalCommitRules(t *testing.T) {
 		if err := a.Tree.externalCommitOK(&tc.commit, &a.Context); !errors.Is(err, tc.want) {
 			t.Errorf("%s: got %v, want %v", tc.name, err, tc.want)
 		}
+	}
+}
+
+// JoinExternal checks the group info's signature before the tree,
+// whose checks cost far more, so that an unsigned group info costs
+// the joiner one signature verification.
+func TestJoinExternalChecksSignatureFirst(t *testing.T) {
+	cs := X25519AES128GCMSHA256Ed25519
+	a1, _, _ := threeMember(t)
+	msg, err := a1.GroupInfo()
+	if err != nil {
+		t.Fatal(err)
+	}
+	info := send(t, msg).GroupInfo
+	info.Signature[0] ^= 1
+	tree := append(a1.Tree.Clone(), nil, nil) // blank last node
+	info.Extensions = slices.DeleteFunc(info.Extensions, func(e Extension) bool {
+		return e.Type == ExtensionTypeRatchetTree
+	})
+	dave := newTestClient(t, cs, "dave")
+	if _, _, err := dave.JoinExternal(info, tree); !errors.Is(err, ErrBadSignature) {
+		t.Errorf("JoinExternal = %v, want %v", err, ErrBadSignature)
 	}
 }

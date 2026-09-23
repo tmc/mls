@@ -33,14 +33,18 @@ func (c *Client) JoinExternal(info *GroupInfo, tree RatchetTree) (*Group, *Messa
 	if tree == nil {
 		return nil, nil, ErrNoRatchetTree
 	}
-	if err := tree.verify(cs, &info.GroupContext); err != nil {
-		return nil, nil, err
-	}
+	// The signature is checked before the tree, whose checks cost
+	// far more. The signer's key comes from the unchecked tree, but
+	// the signature covers the tree hash that verify then holds the
+	// tree to, so a forged tree fails one check or the other.
 	signer := tree.Leaf(LeafIndex(info.Signer))
 	if signer == nil {
 		return nil, nil, ErrLeafRange
 	}
 	if err := info.Verify(signer.SignatureKey); err != nil {
+		return nil, nil, err
+	}
+	if err := tree.verify(cs, &info.GroupContext); err != nil {
 		return nil, nil, err
 	}
 	var pub ExternalPub
