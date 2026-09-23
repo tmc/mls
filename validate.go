@@ -295,10 +295,15 @@ func (l *proposalList) check(p proposal) error {
 	return nil
 }
 
-// checkPSK checks a pre-shared key proposal on its own. A resumption
-// key for a reinitialization or a branch belongs in the initial
-// commit of the new group and nowhere else (Sections 11.2 and 11.3).
+// checkPSK checks a pre-shared key proposal on its own. The nonce
+// must be as long as the output of the group's hash (Section
+// 12.1.4), and a resumption key for a reinitialization or a branch
+// belongs in the initial commit of the new group and nowhere else
+// (Sections 11.2 and 11.3).
 func checkPSK(id *PreSharedKeyID, ctx *GroupContext) error {
+	if len(id.PSKNonce) != ctx.CipherSuite.HashSize() {
+		return fmt.Errorf("%w: psk_nonce of %d bytes", ErrProposalList, len(id.PSKNonce))
+	}
 	if id.Type == PSKTypeResumption && ctx.Epoch != 0 {
 		switch id.Usage {
 		case ResumptionPSKUsageReinit, ResumptionPSKUsageBranch:

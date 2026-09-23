@@ -59,6 +59,9 @@ func TestProposalList(t *testing.T) {
 		}},
 		{"resumption psk for reinit", []*Proposal{psk(ResumptionPSKUsageReinit)}},
 		{"resumption psk for branching", []*Proposal{psk(ResumptionPSKUsageBranch)}},
+		{"psk nonce shorter than the hash", []*Proposal{{Type: ProposalTypePreSharedKey, PreSharedKey: &PreSharedKey{
+			PSK: PreSharedKeyID{Type: PSKTypeExternal, PSKID: []byte("k"), PSKNonce: make([]byte, 16)},
+		}}}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

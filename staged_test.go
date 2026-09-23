@@ -196,6 +196,12 @@ func TestStagedInvalidLeftOut(t *testing.T) {
 			stage(t, b, externalPSK("unknown"), a, c)
 			stage(t, c, add(dave), a, b)
 		}, 4},
+		{"psk nonce shorter than the hash", func(t *testing.T, a, b, c *Group) {
+			p := externalPSK("known")
+			p.PreSharedKey.PSK.PSKNonce = p.PreSharedKey.PSK.PSKNonce[:16]
+			stage(t, b, p, a, c)
+			stage(t, c, add(dave), a, b)
+		}, 4},
 		{"remove of a blank leaf", func(t *testing.T, a, b, c *Group) {
 			stage(t, b, &Proposal{Type: ProposalTypeRemove, Remove: &Remove{Removed: 3}}, a, c)
 			stage(t, c, add(dave), a, b)
