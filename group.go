@@ -389,6 +389,17 @@ func (g *Group) AddProposal(c *AuthenticatedContent) error {
 	if c.Content.ContentType != ContentTypeProposal {
 		return ErrNotProposal
 	}
+	// A key package is checked on receipt, so that one that could
+	// never be committed is not kept. Its lifetime is checked when
+	// it is committed.
+	if p := c.Content.Proposal; p.Type == ProposalTypeAdd {
+		if p.Add.KeyPackage.CipherSuite != g.CipherSuite {
+			return ErrUnsupportedCipherSuite
+		}
+		if err := p.Add.KeyPackage.Validate(time.Time{}); err != nil {
+			return err
+		}
+	}
 	ref, err := c.Ref(g.CipherSuite)
 	if err != nil {
 		return err

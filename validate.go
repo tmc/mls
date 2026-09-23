@@ -120,114 +120,189 @@ func (t RatchetTree) validateLeaves(cs CipherSuite, ctx *GroupContext) error {
 // external commit are different and are checked by
 // externalProposalsOK instead.
 func (t RatchetTree) validateProposals(ps []proposal, committer LeafIndex, ctx *GroupContext) error {
-	var (
-		touched = make(map[LeafIndex]bool) // leaves an Update or Remove applies to
-		added   = make(map[string]bool)    // signature keys the Adds introduce
-		removed = make(map[LeafIndex]bool)
-		psks    = make(map[string]bool)
-		exts    int
-	)
+	l := t.newProposalList(committer, ctx)
 	for _, p := range ps {
 		if p.Type == ProposalTypeRemove {
-			removed[LeafIndex(p.Remove.Removed)] = true
+			l.removed[LeafIndex(p.Remove.Removed)] = true
 		}
 	}
 	for _, p := range ps {
-		switch p.Type {
-		case ProposalTypeUpdate:
-			if p.from.Type != SenderTypeMember {
-				return fmt.Errorf("%w: update proposal from outside the group", ErrProposalList)
-			}
-			if p.leaf() == committer {
-				return fmt.Errorf("%w: update proposal from the committer", ErrProposalList)
-			}
-			if touched[p.leaf()] {
-				return fmt.Errorf("%w: two proposals for leaf %d", ErrProposalList, p.leaf())
-			}
-			touched[p.leaf()] = true
+		if err := l.add(p); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
-		case ProposalTypeRemove:
-			i := LeafIndex(p.Remove.Removed)
-			if i == committer {
-				return fmt.Errorf("%w: remove proposal for the committer", ErrProposalList)
-			}
-			if touched[i] {
-				return fmt.Errorf("%w: two proposals for leaf %d", ErrProposalList, i)
-			}
-			touched[i] = true
+// A proposalList is the list of proposals one commit covers, built up
+// one proposal at a time. Each proposal is checked against the ones
+// already in the list before it joins them, which lets a receiver
+// check a whole commit and a committer choose, from the proposals it
+// was sent, a set it may commit together.
+type proposalList struct {
+	tree      RatchetTree
+	committer LeafIndex
+	ctx       *GroupContext
+	removed   map[LeafIndex]bool // leaves the commit removes
+	touched   map[LeafIndex]bool // leaves an Update or Remove applies to
+	keys      map[string]bool    // keys the Adds and Updates bring in
+	psks      map[string]bool    // encoded PreSharedKeyIDs
+	exts      bool               // the list has a group_context_extensions proposal
+	reinit    bool               // the list has a reinit proposal
+	n         int
+}
 
-		case ProposalTypeAdd:
-			// Two clients are the same if they present the
-			// same signature key, which is the comparison
-			// Section 12.2 leaves to the application.
-			key := string(p.Add.KeyPackage.LeafNode.SignatureKey)
-			if added[key] {
-				return fmt.Errorf("%w: two add proposals for the same client", ErrProposalList)
-			}
-			added[key] = true
-			for i, n := range t.Members() {
-				if string(n.SignatureKey) == key && !removed[i] {
-					return fmt.Errorf("%w: add proposal for a member of the group", ErrProposalList)
-				}
-			}
+func (t RatchetTree) newProposalList(committer LeafIndex, ctx *GroupContext) *proposalList {
+	return &proposalList{
+		tree:      t,
+		committer: committer,
+		ctx:       ctx,
+		removed:   make(map[LeafIndex]bool),
+		touched:   make(map[LeafIndex]bool),
+		keys:      make(map[string]bool),
+		psks:      make(map[string]bool),
+	}
+}
 
-		case ProposalTypePreSharedKey:
-			id := p.PreSharedKey.PSK
-			if id.Type == PSKTypeResumption && ctx.Epoch != 0 {
-				switch id.Usage {
-				case ResumptionPSKUsageReinit, ResumptionPSKUsageBranch:
-					// Sections 11.2 and 11.3: these
-					// belong in the initial commit of
-					// the new group and nowhere else.
-					return fmt.Errorf("%w: resumption psk with usage %v", ErrProposalList, id.Usage)
-				}
-			}
-			b, err := Marshal(&id)
-			if err != nil {
-				return err
-			}
-			if psks[string(b)] {
-				return fmt.Errorf("%w: two proposals for the same pre-shared key", ErrProposalList)
-			}
-			psks[string(b)] = true
+// add adds p to the list if the list may cover it alongside the
+// proposals already in it. Otherwise it reports why not and leaves the
+// list as it was.
+func (l *proposalList) add(p proposal) error {
+	if err := l.check(p); err != nil {
+		return err
+	}
+	switch p.Type {
+	case ProposalTypeUpdate:
+		l.touched[p.leaf()] = true
+		l.keys[string(p.Update.LeafNode.EncryptionKey)] = true
+		l.keys[string(p.Update.LeafNode.SignatureKey)] = true
+	case ProposalTypeRemove:
+		l.touched[LeafIndex(p.Remove.Removed)] = true
+		l.removed[LeafIndex(p.Remove.Removed)] = true
+	case ProposalTypeAdd:
+		l.keys[string(p.Add.KeyPackage.LeafNode.EncryptionKey)] = true
+		l.keys[string(p.Add.KeyPackage.LeafNode.SignatureKey)] = true
+	case ProposalTypePreSharedKey:
+		b, err := Marshal(&p.PreSharedKey.PSK)
+		if err != nil {
+			return err
+		}
+		l.psks[string(b)] = true
+	case ProposalTypeGroupContextExtensions:
+		l.exts = true
+	case ProposalTypeReinit:
+		l.reinit = true
+	}
+	l.n++
+	return nil
+}
 
-		case ProposalTypeGroupContextExtensions:
-			exts++
-			if exts > 1 {
-				return fmt.Errorf("%w: two group_context_extensions proposals", ErrProposalList)
-			}
-			// Section 11.1: the members already in the group
-			// must meet whatever the proposal requires of
-			// them, since nothing else will check them again.
-			var req RequiredCapabilities
-			ok, err := p.GroupContextExtensions.Extensions.Decode(ExtensionTypeRequiredCapabilities, &req)
-			if err != nil {
-				return err
-			}
-			if !ok {
-				break
-			}
-			for i, n := range t.Members() {
-				if !req.Supported(&n.Capabilities) {
-					return fmt.Errorf("%w: leaf %d does not meet the required capabilities", ErrProposalList, i)
-				}
-			}
+// check reports why the list may not cover p alongside the proposals
+// already in it, if it may not.
+func (l *proposalList) check(p proposal) error {
+	if p.from.Type == SenderTypeExternal && !externalProposalType(p.Type) {
+		return fmt.Errorf("%w: %v proposal from an external sender", ErrProposalList, p.Type)
+	}
+	if l.reinit || (p.Type == ProposalTypeReinit && l.n > 0) {
+		return fmt.Errorf("%w: reinit proposal alongside others", ErrProposalList)
+	}
+	switch p.Type {
+	case ProposalTypeUpdate:
+		if p.from.Type != SenderTypeMember {
+			return fmt.Errorf("%w: update proposal from outside the group", ErrProposalList)
+		}
+		if p.leaf() == l.committer {
+			return fmt.Errorf("%w: update proposal from the committer", ErrProposalList)
+		}
+		if l.touched[p.leaf()] {
+			return fmt.Errorf("%w: two proposals for leaf %d", ErrProposalList, p.leaf())
+		}
+		// The leaves a commit brings in must not share keys with
+		// one another. Each is checked against the rest of the
+		// tree when it is applied.
+		n := &p.Update.LeafNode
+		if l.keys[string(n.EncryptionKey)] || l.keys[string(n.SignatureKey)] {
+			return fmt.Errorf("%w: two proposals bring in the same key", ErrProposalList)
+		}
 
-		case ProposalTypeExternalInit:
-			return fmt.Errorf("%w: external_init proposal outside an external commit", ErrProposalList)
+	case ProposalTypeRemove:
+		i := LeafIndex(p.Remove.Removed)
+		if i == l.committer {
+			return fmt.Errorf("%w: remove proposal for the committer", ErrProposalList)
+		}
+		if l.touched[i] {
+			return fmt.Errorf("%w: two proposals for leaf %d", ErrProposalList, i)
+		}
 
-		case ProposalTypeReinit:
-			if len(ps) > 1 {
-				return fmt.Errorf("%w: reinit proposal alongside others", ErrProposalList)
-			}
-			if p.Reinit.Version < ctx.Version {
-				// Section 12.1.5: a reinitialization
-				// must not move the group backwards.
-				return fmt.Errorf("%w: reinit proposal to an older version", ErrProposalList)
+	case ProposalTypeAdd:
+		// Two clients are the same if they present the same
+		// signature key, which is the comparison Section 12.2
+		// leaves to the application.
+		n := &p.Add.KeyPackage.LeafNode
+		if l.keys[string(n.EncryptionKey)] || l.keys[string(n.SignatureKey)] {
+			return fmt.Errorf("%w: two proposals bring in the same key", ErrProposalList)
+		}
+		for i, m := range l.tree.Members() {
+			if bytes.Equal(m.SignatureKey, n.SignatureKey) && !l.removed[i] {
+				return fmt.Errorf("%w: add proposal for a member of the group", ErrProposalList)
 			}
 		}
-		if p.from.Type == SenderTypeExternal && !externalProposalType(p.Type) {
-			return fmt.Errorf("%w: %v proposal from an external sender", ErrProposalList, p.Type)
+
+	case ProposalTypePreSharedKey:
+		id := &p.PreSharedKey.PSK
+		if err := checkPSK(id, l.ctx); err != nil {
+			return err
+		}
+		b, err := Marshal(id)
+		if err != nil {
+			return err
+		}
+		if l.psks[string(b)] {
+			return fmt.Errorf("%w: two proposals for the same pre-shared key", ErrProposalList)
+		}
+
+	case ProposalTypeGroupContextExtensions:
+		if l.exts {
+			return fmt.Errorf("%w: two group_context_extensions proposals", ErrProposalList)
+		}
+		// Section 11.1: the members already in the group must
+		// meet whatever the proposal requires of them, since
+		// nothing else will check them again.
+		var req RequiredCapabilities
+		ok, err := p.GroupContextExtensions.Extensions.Decode(ExtensionTypeRequiredCapabilities, &req)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			break
+		}
+		for i, n := range l.tree.Members() {
+			if !req.Supported(&n.Capabilities) {
+				return fmt.Errorf("%w: leaf %d does not meet the required capabilities", ErrProposalList, i)
+			}
+		}
+
+	case ProposalTypeExternalInit:
+		return fmt.Errorf("%w: external_init proposal outside an external commit", ErrProposalList)
+
+	case ProposalTypeReinit:
+		if p.Reinit.Version < l.ctx.Version {
+			// Section 12.1.5: a reinitialization must not
+			// move the group backwards.
+			return fmt.Errorf("%w: reinit proposal to an older version", ErrProposalList)
+		}
+	}
+	return nil
+}
+
+// checkPSK checks a pre-shared key proposal on its own. A resumption
+// key for a reinitialization or a branch belongs in the initial
+// commit of the new group and nowhere else (Sections 11.2 and 11.3).
+func checkPSK(id *PreSharedKeyID, ctx *GroupContext) error {
+	if id.Type == PSKTypeResumption && ctx.Epoch != 0 {
+		switch id.Usage {
+		case ResumptionPSKUsageReinit, ResumptionPSKUsageBranch:
+			return fmt.Errorf("%w: resumption psk with usage %v", ErrProposalList, id.Usage)
 		}
 	}
 	return nil

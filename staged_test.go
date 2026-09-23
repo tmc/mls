@@ -2,6 +2,7 @@ package mls
 
 import (
 	"bytes"
+	"encoding/hex"
 	"testing"
 )
 
@@ -102,5 +103,141 @@ func TestStagedNoConflict(t *testing.T) {
 	if !bytes.Equal(a2.Tree.Leaf(b.Index).EncryptionKey, bl.EncryptionKey) ||
 		!bytes.Equal(a2.Tree.Leaf(c.Index).EncryptionKey, cl.EncryptionKey) {
 		t.Error("a commit dropped an update that conflicted with nothing")
+	}
+}
+
+// stageRaw has b send p and puts it among a's staged proposals
+// without the checks AddProposal makes, as a peer running other code
+// might have accepted it.
+func stageRaw(t *testing.T, a, b *Group, p *Proposal) {
+	t.Helper()
+	c := &AuthenticatedContent{
+		WireFormat: WireFormatPublicMessage,
+		Content: FramedContent{
+			GroupID:     b.Context.GroupID,
+			Epoch:       b.Context.Epoch,
+			Sender:      Sender{Type: SenderTypeMember, LeafIndex: uint32(b.Index)},
+			ContentType: ContentTypeProposal,
+			Proposal:    p,
+		},
+		Auth: FramedContentAuthData{ContentType: ContentTypeProposal},
+	}
+	if err := c.Sign(b.CipherSuite, b.client.SignaturePriv, b.Context.Version, &b.Context); err != nil {
+		t.Fatal(err)
+	}
+	ref, err := c.Ref(a.CipherSuite)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.proposals[hex.EncodeToString(ref)] = c
+}
+
+// stage has from propose p and each of to remember it.
+func stage(t *testing.T, from *Group, p *Proposal, to ...*Group) {
+	t.Helper()
+	m, err := from.Propose(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, g := range to {
+		if _, err := g.Handle(send(t, m)); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// externalPSK is a proposal to inject the external pre-shared key id.
+func externalPSK(id string) *Proposal {
+	return &Proposal{Type: ProposalTypePreSharedKey, PreSharedKey: &PreSharedKey{
+		PSK: PreSharedKeyID{Type: PSKTypeExternal, PSKID: []byte(id), PSKNonce: make([]byte, 32)},
+	}}
+}
+
+// A staged proposal that cannot be committed must not keep the
+// committer from committing: RFC 9420, Section 12.2 has it choose a
+// valid set from what it was sent. Each case stages a bad proposal
+// alongside a good one and checks that the commit carries only the
+// good one.
+func TestStagedInvalidLeftOut(t *testing.T) {
+	cs := X25519AES128GCMSHA256Ed25519
+	psk := func(id PreSharedKeyID) ([]byte, error) {
+		if string(id.PSKID) == "known" {
+			return make([]byte, 32), nil
+		}
+		return nil, ErrUnknownPSK
+	}
+	add := func(c *Client) *Proposal {
+		return &Proposal{Type: ProposalTypeAdd, Add: &Add{KeyPackage: *c.KeyPackage}}
+	}
+	dave := newTestClient(t, cs, "dave")
+	erin := newTestClient(t, cs, "erin")
+	corrupt := *erin.KeyPackage
+	corrupt.Signature = bytes.Clone(corrupt.Signature)
+	corrupt.Signature[0] ^= 1
+
+	tests := []struct {
+		name  string
+		stage func(t *testing.T, a, b, c *Group)
+		want  int // members after the commit
+	}{
+		{"two adds of one client", func(t *testing.T, a, b, c *Group) {
+			stage(t, b, add(dave), a, c)
+			stage(t, c, add(dave), a, b)
+		}, 4},
+		{"key package with a bad signature", func(t *testing.T, a, b, c *Group) {
+			stageRaw(t, a, b, &Proposal{Type: ProposalTypeAdd, Add: &Add{KeyPackage: corrupt}})
+			stage(t, c, add(dave), a, b)
+		}, 4},
+		{"reinit alongside another proposal", func(t *testing.T, a, b, c *Group) {
+			stage(t, b, &Proposal{Type: ProposalTypeReinit, Reinit: &Reinit{GroupID: []byte("new"), Version: Version10, CipherSuite: cs}}, a, c)
+			stage(t, c, externalPSK("known"), a, b)
+		}, 3},
+		{"pre-shared key the committer does not have", func(t *testing.T, a, b, c *Group) {
+			stage(t, b, externalPSK("unknown"), a, c)
+			stage(t, c, add(dave), a, b)
+		}, 4},
+		{"remove of a blank leaf", func(t *testing.T, a, b, c *Group) {
+			stage(t, b, &Proposal{Type: ProposalTypeRemove, Remove: &Remove{Removed: 3}}, a, c)
+			stage(t, c, add(dave), a, b)
+		}, 4},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a, b, c := threeMember(t)
+			for _, g := range []*Group{a, b, c} {
+				g.client.PSK = psk
+			}
+			tt.stage(t, a, b, c)
+			a2, msg, _, err := a.Commit(nil)
+			if err != nil {
+				t.Fatalf("Commit: %v", err)
+			}
+			if a2.Reinit() != nil {
+				t.Error("the commit carried the reinit")
+			}
+			if got := members(a2.Tree); got != tt.want {
+				t.Errorf("members = %d, want %d", got, tt.want)
+			}
+			if _, err := b.Handle(send(t, msg)); err != nil {
+				t.Errorf("a member rejects the commit: %v", err)
+			}
+		})
+	}
+}
+
+// A key package that could never be committed is not staged.
+func TestAddProposalBadKeyPackage(t *testing.T) {
+	a, b, _ := threeMember(t)
+	kp := *newTestClient(t, a.CipherSuite, "dave").KeyPackage
+	kp.Signature = bytes.Clone(kp.Signature)
+	kp.Signature[0] ^= 1
+	stageRaw(t, b, b, &Proposal{Type: ProposalTypeAdd, Add: &Add{KeyPackage: kp}})
+	for _, c := range b.proposals {
+		if err := a.AddProposal(c); err == nil {
+			t.Error("AddProposal accepted a key package with a bad signature")
+		}
+	}
+	if n := len(a.proposals); n != 0 {
+		t.Errorf("%d proposals staged, want 0", n)
 	}
 }

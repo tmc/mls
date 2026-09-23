@@ -2,6 +2,7 @@ package mls
 
 import (
 	"bytes"
+	"cmp"
 	"crypto/rand"
 	"maps"
 	"slices"
@@ -173,9 +174,10 @@ func (g *Group) ProposeUpdate(leaf *LeafNode, encPriv []byte) (*Message, error) 
 	return m, nil
 }
 
-// Commit ends the epoch. It applies every proposal g has seen in this
-// epoch, along with the extra proposals, which are carried in the
-// commit itself. It returns the group's state in the new epoch, the
+// Commit ends the epoch. It applies the extra proposals, which are
+// carried in the commit itself, along with the proposals g has seen
+// in this epoch that are valid and that can be committed with them;
+// the others are left out. An invalid extra proposal is an error. It returns the group's state in the new epoch, the
 // commit to send to the other members, and a welcome for the members
 // the commit adds, which is nil if it adds none. g is left unchanged,
 // and remains usable until the commit is confirmed.
@@ -187,44 +189,112 @@ func (g *Group) Commit(extra []*Proposal) (*Group, *Message, *Message, error) {
 }
 
 // staged returns the proposals g has been given for this epoch that a
-// commit carrying extra may also carry, in a stable order.
+// commit carrying extra may also carry, in a stable order. The extra
+// proposals are the committer's own, and an error in them is
+// reported; the staged ones came from others, and one that is not
+// valid is left out.
 //
-// RFC 9420, Section 12.2 allows a commit to cover at most one Update
-// or Remove for any one leaf, so the ones that conflict have to be
-// settled before the commit is built rather than rejected after. The
-// commit's own proposals decide the leaves they touch, and a removal
-// decides over an update of the leaf it removes; a staged proposal
-// that loses is left behind for a later epoch. A commit never carries
-// a proposal for its sender's own leaf either: the sender's leaf is
-// replaced by the update path, and a member cannot remove itself.
-func (g *Group) staged(extra []*Proposal, from Sender) []*AuthenticatedContent {
-	touched := make(map[LeafIndex]bool)
+// RFC 9420, Section 12.2 expects the committer to choose a valid set
+// from the proposals it was sent, so no single proposal can keep the
+// group from committing. A staged proposal is left behind if it is
+// not valid on its own, or if it conflicts with one already chosen:
+// the commit's own proposals come first, then removals, so that a
+// removal decides over an update of the leaf it removes, then the
+// rest, with a Reinit last, since Section 12.2 prefers the other
+// proposals to a Reinit that cannot be committed alongside them. A
+// commit never carries a proposal for its sender's own leaf either:
+// the sender's leaf is replaced by the update path, and a member
+// cannot remove itself.
+func (g *Group) staged(extra []*Proposal, from Sender) ([]*AuthenticatedContent, error) {
+	l := g.Tree.newProposalList(g.Index, &g.Context)
 	for _, p := range extra {
-		if i, ok := touchedLeaf(p, from); ok {
-			touched[i] = true
+		if p.Type == ProposalTypeRemove {
+			l.removed[LeafIndex(p.Remove.Removed)] = true
 		}
+	}
+	ctx := g.Context
+	for _, p := range extra {
+		if err := l.add(proposal{p, from}); err != nil {
+			return nil, err
+		}
+		if p.Type == ProposalTypeGroupContextExtensions {
+			ctx.Extensions = p.GroupContextExtensions.Extensions
+		}
+	}
+
+	rank := func(ref string) int {
+		switch g.proposals[ref].Content.Proposal.Type {
+		case ProposalTypeRemove:
+			return 0
+		case ProposalTypeGroupContextExtensions:
+			return 1 // before the leaves it constrains
+		case ProposalTypeReinit:
+			return 3
+		}
+		return 2
 	}
 	refs := slices.Sorted(maps.Keys(g.proposals))
+	slices.SortStableFunc(refs, func(a, b string) int { return cmp.Compare(rank(a), rank(b)) })
+
+	// Leaves entering the tree are checked against the tree as the
+	// removals leave it, which is the order apply works in.
+	var tree RatchetTree
+	now := time.Now()
 	out := make([]*AuthenticatedContent, 0, len(refs))
-	// Removals first, so that an update of a leaf a staged removal
-	// covers is the one left behind and not the other way round.
-	for _, removes := range []bool{true, false} {
-		for _, ref := range refs {
-			c := g.proposals[ref]
-			p := c.Content.Proposal
-			if (p.Type == ProposalTypeRemove) != removes {
-				continue
+	for _, ref := range refs {
+		c := g.proposals[ref]
+		p := proposal{c.Content.Proposal, c.Content.Sender}
+		if p.Type != ProposalTypeRemove && tree == nil {
+			tree = g.Tree.Clone()
+			for i := range l.removed {
+				tree.Remove(i)
 			}
-			if i, ok := touchedLeaf(p, c.Content.Sender); ok {
-				if touched[i] || i == g.Index {
-					continue
-				}
-				touched[i] = true
-			}
-			out = append(out, c)
 		}
+		if g.usable(p, tree, &ctx, now) != nil || l.add(p) != nil {
+			continue
+		}
+		if p.Type == ProposalTypeGroupContextExtensions {
+			ctx.Extensions = p.GroupContextExtensions.Extensions
+		}
+		out = append(out, c)
 	}
-	return out
+	return out, nil
+}
+
+// usable reports why a committer cannot apply the proposal p on its
+// own, if it cannot. tree is the tree the leaves p brings in would
+// enter, and ctx the group context they would enter it under.
+func (g *Group) usable(p proposal, tree RatchetTree, ctx *GroupContext, now time.Time) error {
+	cs := g.CipherSuite
+	switch p.Type {
+	case ProposalTypeAdd:
+		kp := &p.Add.KeyPackage
+		if kp.CipherSuite != cs {
+			return ErrUnsupportedCipherSuite
+		}
+		if err := kp.Validate(now); err != nil {
+			return err
+		}
+		return tree.validateLeafInGroup(cs, &kp.LeafNode, tree.Size(), ctx, LeafNodeSourceKeyPackage)
+	case ProposalTypeUpdate:
+		old := g.Tree.Leaf(p.leaf())
+		if old == nil || p.from.Type != SenderTypeMember {
+			return ErrLeafRange
+		}
+		n := &p.Update.LeafNode
+		if bytes.Equal(old.EncryptionKey, n.EncryptionKey) {
+			return ErrDuplicateLeafKey
+		}
+		return tree.validateLeafInGroup(cs, n, p.leaf(), ctx, LeafNodeSourceUpdate)
+	case ProposalTypeRemove:
+		if g.Tree.Leaf(LeafIndex(p.Remove.Removed)) == nil {
+			return ErrLeafRange
+		}
+	case ProposalTypePreSharedKey:
+		_, err := g.client.pskSecret([]PreSharedKeyID{p.PreSharedKey.PSK}, g)
+		return err
+	}
+	return nil
 }
 
 // commit builds a commit from the proposals g has seen and the extra
@@ -243,7 +313,11 @@ func (g *Group) commit(extra []*Proposal, sender SenderType) (*Group, *Message, 
 	}
 	proposals := make([]proposal, 0, len(g.proposals)+len(extra))
 	if sender == SenderTypeMember {
-		for _, c := range g.staged(extra, from) {
+		staged, err := g.staged(extra, from)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		for _, c := range staged {
 			r, err := c.Ref(cs)
 			if err != nil {
 				return nil, nil, nil, err
