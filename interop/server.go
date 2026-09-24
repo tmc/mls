@@ -851,10 +851,7 @@ func (s *server) ReInitWelcome(_ context.Context, req *pb.ReInitWelcomeRequest) 
 	if err != nil {
 		return nil, err
 	}
-	if r := ri.old.Reinit(); r.CipherSuite != ri.old.CipherSuite {
-		return nil, status.Error(codes.Unimplemented, "reinit to a new cipher suite: mls.Group.Reinitialize creates the new group with the old group's client")
-	}
-	g, w, err := ri.old.Reinitialize(kps)
+	g, w, err := ri.old.Reinitialize(ri.m.c, kps)
 	if err != nil {
 		return nil, fmt.Errorf("reinitialize: %w", err)
 	}

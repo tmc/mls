@@ -31,9 +31,10 @@ func (g *Group) Reinit() *Reinit { return g.reinit }
 // Reinitialize creates the group that the members of g move to, which
 // is the third step of RFC 9420, Section 11.2: g must have committed
 // a Reinit proposal, and the new group takes its group ID, version,
-// cipher suite and extensions from it. members are the key packages
-// of everyone who is to join, which the caller fetches afresh, since
-// the new group may use a different cipher suite.
+// cipher suite and extensions from it. c is the member's client in
+// the new group, and members are the key packages of everyone else
+// who is to join; since the new group may use a different cipher
+// suite, all of them are made afresh, for the Reinit's suite.
 //
 // It returns the new group at epoch 1 and the welcome message that
 // carries the rest of the membership into it. The members verify the
@@ -41,7 +42,7 @@ func (g *Group) Reinit() *Reinit { return g.reinit }
 //
 // Any member of g may do this, not only the one that committed the
 // Reinit, so that a group is not stranded by whoever went offline.
-func (g *Group) Reinitialize(members []*KeyPackage) (*Group, *Message, error) {
+func (g *Group) Reinitialize(c *Client, members []*KeyPackage) (*Group, *Message, error) {
 	if g.reinit == nil {
 		return nil, nil, ErrNotReinitialized
 	}
@@ -49,7 +50,10 @@ func (g *Group) Reinitialize(members []*KeyPackage) (*Group, *Message, error) {
 	if ri.Version != g.Context.Version {
 		return nil, nil, ErrUnsupportedVersion
 	}
-	return g.resume(ri.GroupID, ri.CipherSuite, ri.Extensions, ResumptionPSKUsageReinit, members)
+	if c.CipherSuite != ri.CipherSuite {
+		return nil, nil, ErrUnsupportedCipherSuite
+	}
+	return g.resume(c, ri.GroupID, ri.Extensions, ResumptionPSKUsageReinit, members)
 }
 
 // Branch creates a new group holding a subset of g's members, with
@@ -62,16 +66,14 @@ func (g *Group) Branch(groupID []byte, members []*KeyPackage) (*Group, *Message,
 	if bytes.Equal(groupID, g.Context.GroupID) {
 		return nil, nil, ErrSameGroupID
 	}
-	return g.resume(groupID, g.CipherSuite, g.Context.Extensions, ResumptionPSKUsageBranch, members)
+	return g.resume(g.client, groupID, g.Context.Extensions, ResumptionPSKUsageBranch, members)
 }
 
-// resume creates a new group linked to g by a resumption pre-shared
-// key, which is how both reinitialization and branching work.
-func (g *Group) resume(groupID []byte, cs CipherSuite, extensions Extensions, usage ResumptionPSKUsage, members []*KeyPackage) (*Group, *Message, error) {
-	c := g.client
-	if cs != c.CipherSuite {
-		return nil, nil, ErrUnsupportedCipherSuite
-	}
+// resume has c create a new group linked to g by a resumption
+// pre-shared key, which is how both reinitialization and branching
+// work.
+func (g *Group) resume(c *Client, groupID []byte, extensions Extensions, usage ResumptionPSKUsage, members []*KeyPackage) (*Group, *Message, error) {
+	cs := c.CipherSuite
 	next, err := c.NewGroup(groupID, extensions)
 	if err != nil {
 		return nil, nil, err

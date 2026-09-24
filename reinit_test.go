@@ -82,7 +82,8 @@ func TestReinit(t *testing.T) {
 	// packages, since the successor may use a new cipher suite.
 	bob2 := newTestClient(t, cs, "bob")
 	alice2 := newTestClient(t, cs, "alice")
-	next, welcome, err := gc2.Reinitialize([]*KeyPackage{alice2.KeyPackage, bob2.KeyPackage})
+	carol2 := newTestClient(t, cs, "carol")
+	next, welcome, err := gc2.Reinitialize(carol2, []*KeyPackage{alice2.KeyPackage, bob2.KeyPackage})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -166,6 +167,43 @@ func TestBranchGroupID(t *testing.T) {
 	}
 }
 
+// A group can be reinitialized with a new cipher suite, which is one
+// of the reasons RFC 9420, Section 11.2 gives for reinitializing.
+// Whoever creates the new group does so with a client of the new
+// suite, and one of the old suite is refused.
+func TestReinitCipherSuite(t *testing.T) {
+	cs, next := testSuite(), P384AES256GCMSHA384P384
+	_, _, _, ga, gb, _ := setup(t, cs)
+	ri := &Reinit{GroupID: []byte("successor"), Version: Version10, CipherSuite: next}
+	ga2, commit, _, err := ga.Commit([]*Proposal{{Type: ProposalTypeReinit, Reinit: ri}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	gb2, err := gb.Handle(send(t, commit))
+	if err != nil {
+		t.Fatal(err)
+	}
+	alice2 := newTestClient(t, next, "alice")
+	bob2 := newTestClient(t, next, "bob")
+	if _, _, err := ga2.Reinitialize(newTestClient(t, cs, "alice"), []*KeyPackage{bob2.KeyPackage}); !errors.Is(err, ErrUnsupportedCipherSuite) {
+		t.Errorf("Reinitialize with a client of the old suite = %v, want %v", err, ErrUnsupportedCipherSuite)
+	}
+	na, welcome, err := ga2.Reinitialize(alice2, []*KeyPackage{bob2.KeyPackage})
+	if err != nil {
+		t.Fatalf("Reinitialize: %v", err)
+	}
+	if na.CipherSuite != next {
+		t.Errorf("new group's suite = %v, want %v", na.CipherSuite, next)
+	}
+	nb, err := bob2.Resume(send(t, welcome).Welcome, nil, gb2)
+	if err != nil {
+		t.Fatalf("Resume: %v", err)
+	}
+	if !bytes.Equal(na.EpochAuthenticator(), nb.EpochAuthenticator()) {
+		t.Error("members of the new group disagree on its epoch")
+	}
+}
+
 // A reinitialized group is resumed from the epoch that committed the
 // Reinit, not from an earlier one whose resumption key a member also
 // holds.
@@ -186,7 +224,7 @@ func TestResumeReinitEpoch(t *testing.T) {
 	early := *ga2
 	early.Context.Epoch--
 	bob2 := newTestClient(t, cs, "bob")
-	next, welcome, err := early.Reinitialize([]*KeyPackage{bob2.KeyPackage})
+	next, welcome, err := early.Reinitialize(newTestClient(t, cs, "alice"), []*KeyPackage{bob2.KeyPackage})
 	if err != nil {
 		t.Fatal(err)
 	}
