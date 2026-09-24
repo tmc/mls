@@ -189,6 +189,7 @@ func testTreeKEM(t *testing.T, vec *treeKEMVector) {
 // See RFC 9420, Section 12.4.2.
 func TestMergeUpdatePathReusedKey(t *testing.T) {
 	a1, b1, _ := threeMember(t)
+	a1.client.PublicHandshake = true
 	cs := a1.CipherSuite
 	_, msg, _, err := a1.Commit(nil)
 	if err != nil {
@@ -228,6 +229,7 @@ func TestMergeUpdatePathReusedKey(t *testing.T) {
 // does not decrypt. See RFC 9420, Sections 7.6 and 12.4.2.
 func TestDecryptPathSecretsCount(t *testing.T) {
 	a1, b1, _ := threeMember(t)
+	a1.client.PublicHandshake = true
 	cs := a1.CipherSuite
 	_, msg, _, err := a1.Commit(nil)
 	if err != nil {

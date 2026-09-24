@@ -50,6 +50,16 @@ type Client struct {
 	// Section 15.1 leaves the policy to the application, since what
 	// it costs and what it hides both depend on the traffic.
 	Padding int
+
+	// PublicHandshake makes [Group.Propose], [Group.ProposeUpdate]
+	// and [Group.Commit] send their messages as PublicMessages
+	// rather than PrivateMessages. RFC 9420, Section 6 says handshake
+	// messages SHOULD be encrypted and MAY be public where the
+	// delivery service must inspect them, as it must to check the
+	// group's membership changes. Messages from outside the group,
+	// including an external commit, are always public, since their
+	// senders hold no keys to encrypt them with.
+	PublicHandshake bool
 }
 
 // A Group is a member's view of an MLS group at one epoch.

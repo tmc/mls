@@ -117,7 +117,7 @@ func (g *Group) Propose(p *Proposal) (*Message, error) {
 		return nil, ErrReinitialized
 	}
 	c := &AuthenticatedContent{
-		WireFormat: WireFormatPublicMessage,
+		WireFormat: g.handshakeWireFormat(SenderTypeMember),
 		Content: FramedContent{
 			GroupID:     g.Context.GroupID,
 			Epoch:       g.Context.Epoch,
@@ -133,7 +133,37 @@ func (g *Group) Propose(p *Proposal) (*Message, error) {
 	if err := g.AddProposal(c); err != nil {
 		return nil, err
 	}
-	pm, err := c.PublicMessage(g.CipherSuite, g.schedule.MembershipKey, &g.Context)
+	return g.frame(c)
+}
+
+// handshakeWireFormat reports how g frames a handshake message from a
+// sender of the given type: privately if the client asks for it and
+// the sender is a member, publicly otherwise.
+func (g *Group) handshakeWireFormat(sender SenderType) WireFormat {
+	if !g.client.PublicHandshake && sender == SenderTypeMember {
+		return WireFormatPrivateMessage
+	}
+	return WireFormatPublicMessage
+}
+
+// frame wraps the signed handshake content c, sent in g's epoch, in a
+// message of c's wire format: a PublicMessage carrying a membership
+// tag, or a PrivateMessage encrypted under g's handshake ratchet
+// (RFC 9420, Sections 6.2 and 6.3).
+func (g *Group) frame(c *AuthenticatedContent) (*Message, error) {
+	cs := g.CipherSuite
+	if c.WireFormat == WireFormatPrivateMessage {
+		r, err := g.keys.ratchet(g.Index, c.Content.ContentType)
+		if err != nil {
+			return nil, err
+		}
+		pm, err := c.privateMessage(cs, r, g.schedule.SenderDataSecret, g.client.Padding)
+		if err != nil {
+			return nil, err
+		}
+		return &Message{Version: g.Context.Version, WireFormat: WireFormatPrivateMessage, PrivateMessage: pm}, nil
+	}
+	pm, err := c.PublicMessage(cs, g.schedule.MembershipKey, &g.Context)
 	if err != nil {
 		return nil, err
 	}
@@ -400,7 +430,7 @@ func (g *Group) commit(extra []*Proposal, sender SenderType) (*Group, *Message, 
 	// Sign the commit, which the transcript hash then covers, and
 	// derive the new epoch's secrets from it.
 	c := &AuthenticatedContent{
-		WireFormat: WireFormatPublicMessage,
+		WireFormat: g.handshakeWireFormat(sender),
 		Content: FramedContent{
 			GroupID:     g.Context.GroupID,
 			Epoch:       g.Context.Epoch,
@@ -436,11 +466,10 @@ func (g *Group) commit(extra []*Proposal, sender SenderType) (*Group, *Message, 
 	next.keys = newSecretTree(cs, next.Tree.Size(), next.schedule.EncryptionSecret)
 	next.resumption[next.Context.Epoch] = next.schedule.ResumptionPSK
 
-	pm, err := c.PublicMessage(cs, g.schedule.MembershipKey, &g.Context)
+	msg, err := g.frame(c)
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	msg := &Message{Version: g.Context.Version, WireFormat: WireFormatPublicMessage, PublicMessage: pm}
 
 	welcome, err := next.welcome(c.Auth.ConfirmationTag, proposals, ch.added, ch.psks)
 	if err != nil {

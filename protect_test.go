@@ -384,6 +384,7 @@ func TestUnprotectRejects(t *testing.T) {
 // from several goroutines at once. Run under -race.
 func TestMarshalConcurrent(t *testing.T) {
 	a, _, _ := threeMember(t)
+	a.client.PublicHandshake = true
 	cs := a.CipherSuite
 	m, err := a.Propose(&Proposal{Type: ProposalTypeRemove, Remove: &Remove{Removed: 2}})
 	if err != nil {
@@ -549,6 +550,68 @@ func TestProtectPadding(t *testing.T) {
 			same := lens[0] == lens[1] && lens[1] == lens[2]
 			if want := pad > 1; same != want {
 				t.Errorf("padding %d: ciphertext lengths %v, want all equal = %v", pad, lens, want)
+			}
+		})
+	}
+}
+
+func TestPublicHandshake(t *testing.T) {
+	for _, tt := range []struct {
+		encrypt bool
+		want    WireFormat
+	}{
+		{false, WireFormatPublicMessage},
+		{true, WireFormatPrivateMessage},
+	} {
+		t.Run(fmt.Sprint(tt.encrypt), func(t *testing.T) {
+			cs := X25519AES128GCMSHA256Ed25519
+			alice := newTestClient(t, cs, "alice")
+			bob := newTestClient(t, cs, "bob")
+			carol := newTestClient(t, cs, "carol")
+			alice.PublicHandshake, bob.PublicHandshake = !tt.encrypt, !tt.encrypt
+			ag, err := alice.NewGroup([]byte("group"), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			ag, _, w, err := ag.Commit([]*Proposal{{Type: ProposalTypeAdd, Add: &Add{KeyPackage: *bob.KeyPackage}}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			bg, err := bob.Join(send(t, w).Welcome, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			// Bob proposes, Alice commits by reference, and both
+			// reach the same epoch.
+			p, err := bg.Propose(&Proposal{Type: ProposalTypeAdd, Add: &Add{KeyPackage: *carol.KeyPackage}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if p.WireFormat != tt.want {
+				t.Errorf("proposal wire format = %v, want %v", p.WireFormat, tt.want)
+			}
+			if ag, err = ag.Handle(send(t, p)); err != nil {
+				t.Fatalf("Handle(proposal): %v", err)
+			}
+			ag, c, w, err := ag.Commit(nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if c.WireFormat != tt.want {
+				t.Errorf("commit wire format = %v, want %v", c.WireFormat, tt.want)
+			}
+			if bg, err = bg.Handle(send(t, c)); err != nil {
+				t.Fatalf("Handle(commit): %v", err)
+			}
+			cg, err := carol.Join(send(t, w).Welcome, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, g := range []*Group{bg, cg} {
+				if !bytes.Equal(g.EpochAuthenticator(), ag.EpochAuthenticator()) {
+					t.Errorf("epoch authenticators differ after the commit")
+				}
 			}
 		})
 	}
