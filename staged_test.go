@@ -11,7 +11,7 @@ import (
 // the leaf the rotation installs.
 func stageUpdate(t *testing.T, a, b *Group) *LeafNode {
 	t.Helper()
-	leaf, encPriv, _ := rotate(t, b, nil)
+	leaf, encPriv, _ := rotate(t, b)
 	m, err := b.ProposeUpdate(leaf, encPriv)
 	if err != nil {
 		t.Fatal(err)

@@ -9,7 +9,7 @@ import (
 // rotate builds the leaf node of an update for g's own member,
 // rotating both the encryption key and the signature key, and returns
 // it with the two new private keys.
-func rotate(t *testing.T, g *Group, c *Client) (*LeafNode, []byte, []byte) {
+func rotate(t *testing.T, g *Group) (*LeafNode, []byte, []byte) {
 	t.Helper()
 	cs := g.CipherSuite
 	encPriv, encPub, err := cs.GenerateKeyPair()
@@ -51,7 +51,7 @@ func TestProposeUpdate(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	leaf, encPriv, sigPriv := rotate(t, gb, bob)
+	leaf, encPriv, sigPriv := rotate(t, gb)
 	prop, err := gb.ProposeUpdate(leaf, encPriv)
 	if err != nil {
 		t.Fatal(err)
@@ -109,7 +109,7 @@ func TestProposeUpdateErrors(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	leaf, encPriv, _ := rotate(t, gb, bob)
+	leaf, encPriv, _ := rotate(t, gb)
 
 	t.Run("source", func(t *testing.T) {
 		bad := *leaf
@@ -171,7 +171,7 @@ func TestCommitDropsOwnUpdate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	leaf, encPriv, _ := rotate(t, gb, bob)
+	leaf, encPriv, _ := rotate(t, gb)
 	if _, err := gb.ProposeUpdate(leaf, encPriv); err != nil {
 		t.Fatal(err)
 	}
