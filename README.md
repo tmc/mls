@@ -51,6 +51,13 @@ nor `x/crypto` provides, and report `ErrUnsupportedCipherSuite`. Suite
 library exposes only through HPKE, so that one algorithm comes from
 `golang.org/x/crypto/chacha20poly1305`; everything else is stdlib.
 
+In FIPS 140-3 mode (`GODEBUG=fips140=on`, or a `GOFIPS140` build such
+as the certified `v1.0.0` module), only suites 2, 5 and 7 (P-256,
+P-521, P-384) are supported; the X25519 suites 1 and 3 report
+`ErrUnsupportedCipherSuite`. `GODEBUG=fips140=only` is not supported:
+MLS derives its own AES-GCM nonces, which the Go module does not approve
+for encryption. See the package documentation.
+
 Everything RFC 9420 defines is implemented for those suites.
 
 The `multicred` subpackage implements the multi-credential and

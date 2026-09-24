@@ -98,6 +98,30 @@
 // [Group.Protect] pads each message to a multiple of it. The default
 // of zero pads nothing and puts the exact length of every message on
 // the wire.
+//
+// # FIPS 140-3
+//
+// In FIPS 140-3 mode (see [crypto/fips140]), set by GODEBUG=fips140=on
+// or by building with GOFIPS140, including the certified module
+// version GOFIPS140=v1.0.0, only [P256AES128GCMSHA256P256],
+// [P384AES256GCMSHA384P384] and [P521AES256GCMSHA512P521] are
+// supported. The two X25519 suites report [ErrUnsupportedCipherSuite],
+// whether a client uses one or a received message names one: X25519
+// is not an approved algorithm, and ChaCha20-Poly1305 comes from
+// golang.org/x/crypto, outside the module.
+//
+// GODEBUG=fips140=only is not supported. MLS derives each AES-GCM
+// nonce itself, from the secret tree and the reuse guard (RFC 9420,
+// Sections 6.3.1 and 9.1), and the module approves GCM encryption
+// only with nonces it generates itself or builds for specific
+// protocols such as TLS, SSH and HPKE. In fips140=on mode such
+// encryption runs but is recorded as a non-approved service;
+// decryption with a supplied nonce is approved. With
+// GOFIPS140=v1.0.0 the same holds for the AES-GCM inside
+// [crypto/hpke], which encrypts group secrets and path secrets. In
+// fips140=only mode [crypto/cipher.NewGCM] refuses the construction,
+// and [CipherSuite.AEAD] reports [ErrUnsupportedCipherSuite], so a
+// group can neither protect nor unprotect messages.
 package mls
 
 import "github.com/tmc/mls/tlssyntax"
