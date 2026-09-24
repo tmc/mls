@@ -16,10 +16,16 @@ import (
 // group info must carry an external_pub extension; its signature is
 // verified here against the leaf of the member that signed it.
 //
+// The commit also injects the pre-shared keys psks, each by a
+// PreSharedKey proposal, which is the only kind of proposal besides
+// ExternalInit and a resync's Remove that an external commit may
+// carry. Their secrets come from c.PSK, and each nonce must be fresh
+// and as long as the suite's hash output (RFC 9420, Section 8.4).
+//
 // A GroupInfo is specific to an epoch, and the join ends that epoch,
 // so each GroupInfo is good for one external join.
 // See RFC 9420, Section 12.4.3.2.
-func (c *Client) JoinExternal(info *GroupInfo, tree RatchetTree) (*Group, *Message, error) {
+func (c *Client) JoinExternal(info *GroupInfo, tree RatchetTree, psks []PreSharedKeyID) (*Group, *Message, error) {
 	cs := c.CipherSuite
 	if info.GroupContext.CipherSuite != cs {
 		return nil, nil, ErrUnsupportedCipherSuite
@@ -93,6 +99,9 @@ func (c *Client) JoinExternal(info *GroupInfo, tree RatchetTree) (*Group, *Messa
 		if bytes.Equal(l.SignatureKey, leaf.SignatureKey) {
 			proposals = append(proposals, &Proposal{Type: ProposalTypeRemove, Remove: &Remove{Removed: uint32(i)}})
 		}
+	}
+	for _, id := range psks {
+		proposals = append(proposals, &Proposal{Type: ProposalTypePreSharedKey, PreSharedKey: &PreSharedKey{PSK: id}})
 	}
 	next, commit, _, err := g.commit(proposals, SenderTypeNewMemberCommit)
 	if err != nil {

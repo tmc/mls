@@ -344,9 +344,6 @@ func (s *server) JoinGroup(_ context.Context, req *pb.JoinGroupRequest) (*pb.Joi
 func (s *server) ExternalJoin(_ context.Context, req *pb.ExternalJoinRequest) (*pb.ExternalJoinResponse, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if len(req.Psks) > 0 {
-		return nil, status.Error(codes.Unimplemented, "external join with pre-shared keys: mls.Client.JoinExternal takes none")
-	}
 	info, err := decodeGroupInfo(req.GroupInfo)
 	if err != nil {
 		return nil, err
@@ -377,8 +374,13 @@ func (s *server) ExternalJoin(_ context.Context, req *pb.ExternalJoinRequest) (*
 			return nil, fmt.Errorf("sign key package: %w", err)
 		}
 	}
+	var psks []mls.PreSharedKeyID
+	for _, p := range req.Psks {
+		m.psks[string(p.PskId)] = bytes.Clone(p.PskSecret)
+		psks = append(psks, mls.PreSharedKeyID{Type: mls.PSKTypeExternal, PSKID: p.PskId, PSKNonce: nonce(cs)})
+	}
 	m.c.PublicHandshake = !req.EncryptHandshake
-	g, commit, err := m.c.JoinExternal(info, tree)
+	g, commit, err := m.c.JoinExternal(info, tree, psks)
 	if err != nil {
 		return nil, fmt.Errorf("external join: %w", err)
 	}

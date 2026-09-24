@@ -44,7 +44,7 @@ func testJoinExternal(t *testing.T, cs CipherSuite) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c2, commit, err := carol.JoinExternal(send(t, info).GroupInfo, nil)
+	c2, commit, err := carol.JoinExternal(send(t, info).GroupInfo, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -92,7 +92,7 @@ func testJoinExternal(t *testing.T, cs CipherSuite) {
 	// The group info is good for one join: a joiner can still build
 	// a commit from it, but it is a commit for an epoch that has
 	// ended, and the group rejects it.
-	_, stale, err := carol.JoinExternal(send(t, info).GroupInfo, nil)
+	_, stale, err := carol.JoinExternal(send(t, info).GroupInfo, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,7 +105,7 @@ func testJoinExternal(t *testing.T, cs CipherSuite) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	b3, commit, err := bob.JoinExternal(send(t, info).GroupInfo, nil)
+	b3, commit, err := bob.JoinExternal(send(t, info).GroupInfo, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -186,7 +186,7 @@ func TestJoinExternalResyncLeftmost(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, commit, err := clients[1].JoinExternal(send(t, info).GroupInfo, nil)
+	b, commit, err := clients[1].JoinExternal(send(t, info).GroupInfo, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -274,7 +274,72 @@ func TestJoinExternalChecksSignatureFirst(t *testing.T) {
 		return e.Type == ExtensionTypeRatchetTree
 	})
 	dave := newTestClient(t, cs, "dave")
-	if _, _, err := dave.JoinExternal(info, tree); !errors.Is(err, ErrBadSignature) {
+	if _, _, err := dave.JoinExternal(info, tree, nil); !errors.Is(err, ErrBadSignature) {
 		t.Errorf("JoinExternal = %v, want %v", err, ErrBadSignature)
+	}
+}
+
+// TestJoinExternalPSK checks the pre-shared keys an external commit
+// may inject (RFC 9420, Section 12.4.3.2): the joiner and the members
+// each resolve them through their own Client.PSK, and must agree on
+// the secrets for the epochs to match.
+func TestJoinExternalPSK(t *testing.T) {
+	cs := testSuite()
+	store := func(keys map[string]string) func(PreSharedKeyID) ([]byte, error) {
+		return func(id PreSharedKeyID) ([]byte, error) {
+			if k, ok := keys[string(id.PSKID)]; ok {
+				return []byte(k), nil
+			}
+			return nil, ErrUnknownPSK
+		}
+	}
+	id := func(name string, nonce int) PreSharedKeyID {
+		return PreSharedKeyID{Type: PSKTypeExternal, PSKID: []byte(name), PSKNonce: make([]byte, nonce)}
+	}
+	n := cs.HashSize()
+	both := map[string]string{"k1": "secret one", "k2": "secret two"}
+	for _, tc := range []struct {
+		name   string
+		joiner map[string]string
+		member map[string]string
+		psks   []PreSharedKeyID
+		join   error // from JoinExternal
+		handle error // from the member's Handle
+	}{
+		{name: "one", joiner: both, member: both, psks: []PreSharedKeyID{id("k1", n)}},
+		{name: "two", joiner: both, member: both, psks: []PreSharedKeyID{id("k1", n), id("k2", n)}},
+		{name: "joiner lacks key", joiner: nil, member: both, psks: []PreSharedKeyID{id("k1", n)}, join: ErrUnknownPSK},
+		{name: "member lacks key", joiner: both, member: nil, psks: []PreSharedKeyID{id("k1", n)}, handle: ErrUnknownPSK},
+		{name: "secrets differ", joiner: both, member: map[string]string{"k1": "other"}, psks: []PreSharedKeyID{id("k1", n)}, handle: ErrBadConfirmationTag},
+		{name: "short nonce", joiner: both, member: both, psks: []PreSharedKeyID{id("k1", n-1)}, join: ErrProposalList},
+		{name: "same key twice", joiner: both, member: both, psks: []PreSharedKeyID{id("k1", n), id("k1", n)}, join: ErrProposalList},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			a, _, _ := threeMember(t)
+			a.client.PSK = store(tc.member)
+			dave := newTestClient(t, cs, "dave")
+			dave.PSK = store(tc.joiner)
+			info, err := a.GroupInfo()
+			if err != nil {
+				t.Fatal(err)
+			}
+			d, commit, err := dave.JoinExternal(send(t, info).GroupInfo, nil, tc.psks)
+			if !errors.Is(err, tc.join) {
+				t.Fatalf("JoinExternal = %v, want %v", err, tc.join)
+			}
+			if err != nil {
+				return
+			}
+			next, err := a.Handle(send(t, commit))
+			if !errors.Is(err, tc.handle) {
+				t.Fatalf("Handle = %v, want %v", err, tc.handle)
+			}
+			if err != nil {
+				return
+			}
+			if !bytes.Equal(next.EpochAuthenticator(), d.EpochAuthenticator()) {
+				t.Error("member disagrees with the joiner")
+			}
+		})
 	}
 }
