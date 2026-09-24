@@ -120,7 +120,17 @@ type ratchet struct {
 	cs         CipherSuite
 	secret     []byte
 	generation uint32
+
+	// skipped holds the keys and nonces of generations the ratchet
+	// moved past without using, so that a message delivered after
+	// later ones can still be read. They are unconsumed, which RFC
+	// 9420, Section 9.2 allows a member to keep; each is deleted
+	// once used, and Section 15.3's bound on how many to keep is
+	// the maxGenerationJump generations below the ratchet.
+	skipped map[uint32]keyNonce
 }
+
+type keyNonce struct{ key, nonce []byte }
 
 // Generation is the generation the ratchet will next produce.
 func (r *ratchet) Generation() uint32 { return r.generation }
@@ -153,29 +163,56 @@ func (r *ratchet) Next() (key, nonce []byte, err error) {
 // of lost messages a receiver is willing to ride out.
 const maxGenerationJump = 1024
 
-// Key returns the key and nonce for a generation at or after the one
-// the ratchet has reached, along with a function that advances the
-// ratchet past it. The caller must advance only once the message has
-// been authenticated: a message that does not decrypt must not
-// consume the keys of the member it claims to come from. Generations
-// in between are skipped and their keys discarded, and a generation
-// the ratchet has already passed is gone: RFC 9420, Section 9.2
-// requires that keys be deleted as they are consumed.
-func (r *ratchet) Key(generation uint32) (key, nonce []byte, advance func(), err error) {
+// Key returns the key and nonce for a generation, along with a
+// function that consumes them. The caller must consume them only once
+// the message has been authenticated: a message that does not decrypt
+// must not spend the keys of the member it claims to come from.
+//
+// A generation at or after the one the ratchet has reached moves the
+// ratchet past it, and the keys of the generations in between are
+// kept for messages that arrive late (RFC 9420, Section 15.3). A
+// generation the ratchet has passed is available only if it was
+// skipped, is not too far behind, and has not been used: RFC 9420,
+// Section 9.2 requires that keys be deleted as they are consumed.
+func (r *ratchet) Key(generation uint32) (key, nonce []byte, consume func(), err error) {
 	if generation < r.generation {
-		return nil, nil, nil, ErrConsumed
+		kn, ok := r.skipped[generation]
+		if !ok {
+			return nil, nil, nil, ErrConsumed
+		}
+		return kn.key, kn.nonce, func() { delete(r.skipped, generation) }, nil
 	}
 	if generation-r.generation > maxGenerationJump {
 		return nil, nil, nil, ErrGenerationJump
 	}
 	ahead := &ratchet{cs: r.cs, secret: r.secret, generation: r.generation}
+	var skipped []keyNonce
 	for {
 		key, nonce, err := ahead.Next()
 		if err != nil {
 			return nil, nil, nil, err
 		}
 		if ahead.generation == generation+1 {
-			return key, nonce, func() { r.secret, r.generation = ahead.secret, ahead.generation }, nil
+			return key, nonce, func() { r.skip(skipped, ahead) }, nil
+		}
+		skipped = append(skipped, keyNonce{key, nonce})
+	}
+}
+
+// skip moves r to ahead, keeping the keys of the generations in
+// between, which are skipped in order, and dropping any kept keys
+// that have fallen more than maxGenerationJump behind.
+func (r *ratchet) skip(skipped []keyNonce, ahead *ratchet) {
+	if r.skipped == nil && len(skipped) > 0 {
+		r.skipped = make(map[uint32]keyNonce)
+	}
+	for i, kn := range skipped {
+		r.skipped[r.generation+uint32(i)] = kn
+	}
+	r.secret, r.generation = ahead.secret, ahead.generation
+	for g := range r.skipped {
+		if r.generation-g > maxGenerationJump {
+			delete(r.skipped, g)
 		}
 	}
 }

@@ -555,6 +555,46 @@ func TestProtectPadding(t *testing.T) {
 	}
 }
 
+// Messages delivered out of order can all be read, once each. The
+// IETF interop harness's application tests reorder them this way.
+func TestUnprotectOutOfOrder(t *testing.T) {
+	cs := testSuite()
+	alice := newTestClient(t, cs, "alice")
+	bob := newTestClient(t, cs, "bob")
+	g, err := alice.NewGroup([]byte("group"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	g, _, w, err := g.Commit([]*Proposal{{Type: ProposalTypeAdd, Add: &Add{KeyPackage: *bob.KeyPackage}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	bg, err := bob.Join(send(t, w).Welcome, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var msgs []*Message
+	for i := range 4 {
+		m, err := g.Protect(nil, []byte{byte(i)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		msgs = append(msgs, send(t, m))
+	}
+	for _, i := range []int{3, 1, 0, 2} {
+		c, err := bg.Unprotect(msgs[i])
+		if err != nil {
+			t.Fatalf("Unprotect(message %d): %v", i, err)
+		}
+		if !bytes.Equal(c.Content.ApplicationData, []byte{byte(i)}) {
+			t.Errorf("message %d = %x", i, c.Content.ApplicationData)
+		}
+	}
+	if _, err := bg.Unprotect(msgs[1]); err == nil {
+		t.Errorf("Unprotect(message 1) twice succeeded")
+	}
+}
+
 func TestPublicHandshake(t *testing.T) {
 	for _, tt := range []struct {
 		encrypt bool

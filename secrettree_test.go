@@ -112,3 +112,61 @@ func TestRatchetKeyBounds(t *testing.T) {
 		t.Errorf("Key(3) replayed = %v, want %v", err, ErrConsumed)
 	}
 }
+
+// A ratchet keeps the keys it skips, for messages that arrive late,
+// until they are used or fall too far behind.
+func TestRatchetSkippedKeys(t *testing.T) {
+	cs := testSuite()
+	newRatchet := func() *ratchet {
+		tr := newSecretTree(cs, 2, make([]byte, cs.HashSize()))
+		r, err := tr.ratchet(0, ContentTypeApplication)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return r
+	}
+	var want []keyNonce
+	for fresh := newRatchet(); len(want) < 4; {
+		key, nonce, err := fresh.Next()
+		if err != nil {
+			t.Fatal(err)
+		}
+		want = append(want, keyNonce{key, nonce})
+	}
+
+	r := newRatchet()
+	for _, gen := range []uint32{3, 1, 0, 2} {
+		key, nonce, consume, err := r.Key(gen)
+		if err != nil {
+			t.Fatalf("Key(%d): %v", gen, err)
+		}
+		if !bytes.Equal(key, want[gen].key) || !bytes.Equal(nonce, want[gen].nonce) {
+			t.Errorf("Key(%d) = %x/%x, want %x/%x", gen, key, nonce, want[gen].key, want[gen].nonce)
+		}
+		consume()
+		if _, _, _, err := r.Key(gen); err != ErrConsumed {
+			t.Errorf("Key(%d) after use = %v, want %v", gen, err, ErrConsumed)
+		}
+	}
+	if len(r.skipped) != 0 {
+		t.Errorf("%d skipped keys left after all were used", len(r.skipped))
+	}
+
+	// A key left unused is dropped once the ratchet is
+	// maxGenerationJump past it.
+	_, _, consume, err := r.Key(5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	consume()
+	if _, _, consume, err = r.Key(5 + maxGenerationJump); err != nil {
+		t.Fatal(err)
+	}
+	consume()
+	if _, _, _, err := r.Key(4); err != ErrConsumed {
+		t.Errorf("Key(4) far behind = %v, want %v", err, ErrConsumed)
+	}
+	if len(r.skipped) > maxGenerationJump {
+		t.Errorf("ratchet keeps %d skipped keys, want at most %d", len(r.skipped), maxGenerationJump)
+	}
+}

@@ -109,7 +109,10 @@ func cloneSecretTree(t *secretTree) *secretTree {
 	c.secrets = maps.Clone(t.secrets)
 	c.ratchets = make(map[LeafIndex]*leafRatchets, len(t.ratchets))
 	for i, r := range t.ratchets {
-		c.ratchets[i] = new(*r)
+		lr := new(*r)
+		lr.handshake.skipped = maps.Clone(r.handshake.skipped)
+		lr.application.skipped = maps.Clone(r.application.skipped)
+		c.ratchets[i] = lr
 	}
 	return &c
 }
