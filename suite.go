@@ -8,6 +8,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/elliptic"
+	"crypto/fips140"
 	"crypto/hkdf"
 	"crypto/hpke"
 	"crypto/rand"
@@ -23,7 +24,9 @@ import (
 
 // ErrUnsupportedCipherSuite is reported for cipher suites this
 // package cannot implement. RFC 9420 suites 4 and 6 use X448 and
-// Ed448, which the Go standard library does not provide.
+// Ed448, which the Go standard library does not provide. In FIPS 140-3
+// mode, the suites that use X25519 are unsupported too; see the
+// package documentation.
 var ErrUnsupportedCipherSuite = errors.New("mls: unsupported cipher suite")
 
 // A signatureScheme is the signature algorithm of a cipher suite.
@@ -44,6 +47,7 @@ type params struct {
 	keySize   int  // AEAD key size, Nk
 	nonceSize int  // AEAD nonce size, Nn
 	chacha    bool // AEAD is ChaCha20-Poly1305
+	fips      bool // every primitive is approved in FIPS 140-3 mode
 	kemSize   int  // KEM private key size, Nsk
 	sig       signatureScheme
 	sigCurve  elliptic.Curve // sig == signatureECDSA
@@ -60,7 +64,7 @@ var suiteParams = map[CipherSuite]*params{
 	P256AES128GCMSHA256P256: {
 		hash: crypto.SHA256, curve: ecdh.P256(),
 		kdf: hpke.HKDFSHA256, aead: hpke.AES128GCM, keySize: 16, nonceSize: 12, kemSize: 32,
-		sig: signatureECDSA, sigCurve: elliptic.P256(),
+		sig: signatureECDSA, sigCurve: elliptic.P256(), fips: true,
 	},
 	X25519ChaCha20Poly1305SHA256Ed25519: {
 		hash: crypto.SHA256, curve: ecdh.X25519(),
@@ -70,12 +74,12 @@ var suiteParams = map[CipherSuite]*params{
 	P521AES256GCMSHA512P521: {
 		hash: crypto.SHA512, curve: ecdh.P521(),
 		kdf: hpke.HKDFSHA512, aead: hpke.AES256GCM, keySize: 32, nonceSize: 12, kemSize: 66,
-		sig: signatureECDSA, sigCurve: elliptic.P521(),
+		sig: signatureECDSA, sigCurve: elliptic.P521(), fips: true,
 	},
 	P384AES256GCMSHA384P384: {
 		hash: crypto.SHA384, curve: ecdh.P384(),
 		kdf: hpke.HKDFSHA384, aead: hpke.AES256GCM, keySize: 32, nonceSize: 12, kemSize: 48,
-		sig: signatureECDSA, sigCurve: elliptic.P384(),
+		sig: signatureECDSA, sigCurve: elliptic.P384(), fips: true,
 	},
 }
 
@@ -84,11 +88,18 @@ func (cs CipherSuite) params() (*params, error) {
 	if p == nil {
 		return nil, fmt.Errorf("%w %d", ErrUnsupportedCipherSuite, cs)
 	}
+	if fips140.Enabled() && !p.fips {
+		return nil, fmt.Errorf("%w %v: not approved in FIPS 140-3 mode", ErrUnsupportedCipherSuite, cs)
+	}
 	return p, nil
 }
 
-// Supported reports whether this package implements cs.
-func (cs CipherSuite) Supported() bool { return suiteParams[cs] != nil }
+// Supported reports whether this package implements cs. In FIPS 140-3
+// mode it reports false for the suites that use X25519.
+func (cs CipherSuite) Supported() bool {
+	_, err := cs.params()
+	return err == nil
+}
 
 // HashSize returns the output size of the cipher suite's hash
 // function, called Nh in RFC 9420.
@@ -346,10 +357,17 @@ func (cs CipherSuite) AEADNonceSize() int {
 // AEAD returns the cipher suite's AEAD keyed with key: AES-GCM, or
 // ChaCha20-Poly1305 from golang.org/x/crypto, since the standard
 // library exposes that construction only through crypto/hpke.
+//
+// MLS derives the AEAD nonces itself (RFC 9420, Sections 6.3.1 and
+// 9.1), which is not an approved GCM IV construction, so under
+// GODEBUG=fips140=only AEAD reports [ErrUnsupportedCipherSuite].
 func (cs CipherSuite) AEAD(key []byte) (cipher.AEAD, error) {
 	p, err := cs.params()
 	if err != nil {
 		return nil, err
+	}
+	if fips140.Enforced() {
+		return nil, fmt.Errorf("%w %v: MLS AEAD nonces are not an approved GCM IV construction in FIPS 140-only mode", ErrUnsupportedCipherSuite, cs)
 	}
 	if p.chacha {
 		aead, err := chacha20poly1305.New(key)

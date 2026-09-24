@@ -2,6 +2,7 @@ package multicred_test
 
 import (
 	"bytes"
+	"crypto/fips140"
 	"encoding/binary"
 	"errors"
 	"testing"
@@ -11,10 +12,20 @@ import (
 	"github.com/tmc/mls/tlssyntax"
 )
 
+// skipUnapproved skips a test of a cipher suite that FIPS 140-3 mode
+// refuses, so that the tests pass under GODEBUG=fips140=on.
+func skipUnapproved(t *testing.T, cs mls.CipherSuite) {
+	t.Helper()
+	if fips140.Enabled() && !cs.Supported() {
+		t.Skipf("%v is not approved in FIPS 140-3 mode", cs)
+	}
+}
+
 // newBinding returns a binding of a basic credential with the given
 // identity, signed under suite cs and bound to signatureKey.
 func newBinding(t *testing.T, cs mls.CipherSuite, identity string, signatureKey mls.SignaturePublicKey) multicred.Binding {
 	t.Helper()
+	skipUnapproved(t, cs)
 	priv, pub, err := cs.GenerateSignatureKeyPair()
 	if err != nil {
 		t.Fatal(err)
@@ -38,6 +49,7 @@ func TestCredential(t *testing.T) {
 	}
 	for _, cs := range suites {
 		t.Run(cs.String(), func(t *testing.T) {
+			skipUnapproved(t, cs)
 			_, signatureKey, err := cs.GenerateSignatureKeyPair()
 			if err != nil {
 				t.Fatal(err)
@@ -169,6 +181,7 @@ func TestNested(t *testing.T) {
 		}
 	}
 
+	skipUnapproved(t, mls.X25519AES128GCMSHA256Ed25519)
 	_, signatureKey, err := mls.X25519AES128GCMSHA256Ed25519.GenerateSignatureKeyPair()
 	if err != nil {
 		t.Fatal(err)
@@ -192,6 +205,7 @@ func TestNested(t *testing.T) {
 
 func TestMaxBindings(t *testing.T) {
 	cs := mls.X25519AES128GCMSHA256Ed25519
+	skipUnapproved(t, cs)
 	_, signatureKey, err := cs.GenerateSignatureKeyPair()
 	if err != nil {
 		t.Fatal(err)

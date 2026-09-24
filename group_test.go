@@ -2,13 +2,24 @@ package mls
 
 import (
 	"bytes"
+	"crypto/fips140"
 	"errors"
 	"testing"
 	"time"
 )
 
+// skipUnapproved skips a test of a cipher suite that FIPS 140-3 mode
+// refuses, so that the tests pass under GODEBUG=fips140=on.
+func skipUnapproved(t testing.TB, cs CipherSuite) {
+	t.Helper()
+	if fips140.Enabled() && !cs.Supported() {
+		t.Skipf("%v is not approved in FIPS 140-3 mode", cs)
+	}
+}
+
 func newTestClient(t testing.TB, cs CipherSuite, name string) *Client {
 	t.Helper()
+	skipUnapproved(t, cs)
 	c, err := NewClient(cs, Credential{Type: CredentialTypeBasic, Identity: []byte(name)}, time.Hour)
 	if err != nil {
 		t.Fatal(err)

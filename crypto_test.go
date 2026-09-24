@@ -4,10 +4,15 @@ package mls
 
 import (
 	"bytes"
+	"crypto/fips140"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"os"
+	"os/exec"
+	"strings"
 	"testing"
+	"time"
 )
 
 // hexBytes decodes a hex string from a JSON test vector.
@@ -162,6 +167,80 @@ func TestCryptoBasicsVectors(t *testing.T) {
 				t.Errorf("DecryptWithLabel of our own ciphertext: %v", err)
 			} else if !bytes.Equal(got, c.Plaintext) {
 				t.Errorf("round trip = %x, want %x", got, c.Plaintext)
+			}
+		})
+	}
+}
+
+// TestFIPS140 runs TestFIPS140Mode in a child process under each
+// setting of GODEBUG=fips140, which cannot change once a program has
+// started.
+func TestFIPS140(t *testing.T) {
+	for _, mode := range []string{"on", "only"} {
+		t.Run(mode, func(t *testing.T) {
+			cmd := exec.Command(os.Args[0], "-test.run=^TestFIPS140Mode$", "-test.v")
+			cmd.Env = append(os.Environ(), "GODEBUG="+os.Getenv("GODEBUG")+",fips140="+mode)
+			out, err := cmd.CombinedOutput()
+			if err != nil {
+				t.Fatalf("%v\n%s", err, out)
+			}
+			if !strings.Contains(string(out), "--- PASS: TestFIPS140Mode") {
+				t.Fatalf("TestFIPS140Mode did not pass:\n%s", out)
+			}
+		})
+	}
+}
+
+// TestFIPS140Mode checks which cipher suites FIPS 140-3 mode admits.
+// TestFIPS140 runs it with GODEBUG=fips140=on and =only.
+func TestFIPS140Mode(t *testing.T) {
+	if !fips140.Enabled() {
+		t.Skip("needs GODEBUG=fips140=on or only")
+	}
+	cred := Credential{Type: CredentialTypeBasic, Identity: []byte("alice")}
+	for _, cs := range []CipherSuite{
+		X25519AES128GCMSHA256Ed25519,
+		X25519ChaCha20Poly1305SHA256Ed25519,
+	} {
+		if cs.Supported() {
+			t.Errorf("%v: Supported = true in FIPS 140-3 mode", cs)
+		}
+		if _, err := NewClient(cs, cred, time.Hour); !errors.Is(err, ErrUnsupportedCipherSuite) {
+			t.Errorf("%v: NewClient: %v, want %v", cs, err, ErrUnsupportedCipherSuite)
+		}
+	}
+	for _, cs := range []CipherSuite{
+		P256AES128GCMSHA256P256,
+		P521AES256GCMSHA512P521,
+		P384AES256GCMSHA384P384,
+	} {
+		t.Run(cs.String(), func(t *testing.T) {
+			if !cs.Supported() {
+				t.Fatal("Supported = false in FIPS 140-3 mode")
+			}
+			// A key package naming a refused suite is refused.
+			kp := *newTestClient(t, cs, "bob").KeyPackage
+			kp.CipherSuite = X25519AES128GCMSHA256Ed25519
+			if err := kp.Validate(time.Now()); !errors.Is(err, ErrUnsupportedCipherSuite) {
+				t.Errorf("Validate of an X25519 key package: %v, want %v", err, ErrUnsupportedCipherSuite)
+			}
+			if !fips140.Enforced() {
+				testGroup(t, cs)
+				return
+			}
+			// MLS's AEAD nonces are not an approved GCM IV
+			// construction, so fips140=only refuses the AEAD, and
+			// with it the welcome of the first add.
+			if _, err := cs.AEAD(make([]byte, cs.AEADKeySize())); !errors.Is(err, ErrUnsupportedCipherSuite) {
+				t.Errorf("AEAD: %v, want %v", err, ErrUnsupportedCipherSuite)
+			}
+			g, err := newTestClient(t, cs, "alice").NewGroup([]byte("group"), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			add := &Proposal{Type: ProposalTypeAdd, Add: &Add{KeyPackage: *newTestClient(t, cs, "bob").KeyPackage}}
+			if _, _, _, err := g.Commit([]*Proposal{add}); !errors.Is(err, ErrUnsupportedCipherSuite) {
+				t.Errorf("Commit: %v, want %v", err, ErrUnsupportedCipherSuite)
 			}
 		})
 	}
