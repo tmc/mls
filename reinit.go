@@ -57,16 +57,18 @@ func (g *Group) Reinitialize(c *Client, members []*KeyPackage) (*Group, *Message
 }
 
 // Branch creates a new group holding a subset of g's members, with
-// the same parameters as g but a new group ID, as RFC 9420, Section
-// 11.3 describes. members are the key packages of the subgroup's
-// members, which the caller fetches afresh; g's own member is the
-// creator and needs none. It returns the new group at epoch 1 and the
-// welcome message for the others.
-func (g *Group) Branch(groupID []byte, members []*KeyPackage) (*Group, *Message, error) {
+// g's version and cipher suite but a new group ID, as RFC 9420,
+// Section 11.3 describes. The new group's context carries extensions,
+// which need not be g's; pass g.Context.Extensions to keep them.
+// members are the key packages of the subgroup's members, which the
+// caller fetches afresh; g's own member is the creator and needs
+// none. It returns the new group at epoch 1 and the welcome message
+// for the others.
+func (g *Group) Branch(groupID []byte, extensions Extensions, members []*KeyPackage) (*Group, *Message, error) {
 	if bytes.Equal(groupID, g.Context.GroupID) {
 		return nil, nil, ErrSameGroupID
 	}
-	return g.resume(g.client, groupID, g.Context.Extensions, ResumptionPSKUsageBranch, members)
+	return g.resume(g.client, groupID, extensions, ResumptionPSKUsageBranch, members)
 }
 
 // resume has c create a new group linked to g by a resumption

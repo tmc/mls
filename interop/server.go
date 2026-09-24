@@ -926,14 +926,17 @@ func (s *server) CreateBranch(_ context.Context, req *pb.CreateBranchRequest) (*
 	if err != nil {
 		return nil, err
 	}
-	if len(req.Extensions) > 0 {
-		return nil, status.Error(codes.Unimplemented, "branch with new extensions: mls.Group.Branch keeps the group's extensions")
-	}
 	kps, err := keyPackages(req.KeyPackages)
 	if err != nil {
 		return nil, err
 	}
-	g, w, err := st.group.Branch(req.GroupId, kps)
+	// With no extensions given, the branch keeps the group's, as
+	// openmls's client does.
+	exts := st.group.Context.Extensions
+	if len(req.Extensions) > 0 {
+		exts = extensions(req.Extensions)
+	}
+	g, w, err := st.group.Branch(req.GroupId, exts, kps)
 	if err != nil {
 		return nil, fmt.Errorf("branch: %w", err)
 	}

@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"errors"
 	"testing"
+
+	"github.com/tmc/mls/tlssyntax"
 )
 
 // setup builds a three-member group and returns it as each member
@@ -125,7 +127,7 @@ func TestBranch(t *testing.T) {
 	_, bob, _, ga, _, _ := setup(t, cs)
 
 	bob2 := newTestClient(t, cs, "bob")
-	sub, welcome, err := ga.Branch([]byte("subgroup"), []*KeyPackage{bob2.KeyPackage})
+	sub, welcome, err := ga.Branch([]byte("subgroup"), ga.Context.Extensions, []*KeyPackage{bob2.KeyPackage})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -146,7 +148,7 @@ func TestBranch(t *testing.T) {
 	// A client that was not in the original group cannot be
 	// branched into the subgroup.
 	dave := newTestClient(t, cs, "dave")
-	sub, welcome, err = ga.Branch([]byte("subgroup"), []*KeyPackage{dave.KeyPackage})
+	sub, welcome, err = ga.Branch([]byte("subgroup"), ga.Context.Extensions, []*KeyPackage{dave.KeyPackage})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -156,13 +158,63 @@ func TestBranch(t *testing.T) {
 	_ = bob
 }
 
+// A branch may carry extensions other than its parent's (RFC 9420,
+// Section 11.3), and its members must support what they require.
+func TestBranchExtensions(t *testing.T) {
+	cs := testSuite()
+	ext := func(typ ExtensionType, body tlssyntax.Marshaler) Extensions {
+		var es Extensions
+		if err := es.Set(typ, body); err != nil {
+			t.Fatal(err)
+		}
+		return es
+	}
+	// The extensions of the interop harness's branch/with_extensions.
+	harness := append(ext(ExtensionTypeRequiredCapabilities, &RequiredCapabilities{}),
+		ext(ExtensionTypeExternalSenders, &ExternalSenders{})...)
+	for _, tc := range []struct {
+		name       string
+		extensions Extensions
+		want       error
+	}{
+		{"none", nil, nil},
+		{"new", harness, nil},
+		{"unsupported", ext(ExtensionTypeRequiredCapabilities, &RequiredCapabilities{ExtensionTypes: []ExtensionType{0xff00}}), ErrUnsupportedCapability},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, _, _, ga, _, _ := setup(t, cs)
+			bob2 := newTestClient(t, cs, "bob")
+			sub, welcome, err := ga.Branch([]byte("subgroup"), tc.extensions, []*KeyPackage{bob2.KeyPackage})
+			if !errors.Is(err, tc.want) {
+				t.Fatalf("Branch = %v, want %v", err, tc.want)
+			}
+			if err != nil {
+				return
+			}
+			if !sameExtensions(sub.Context.Extensions, tc.extensions) {
+				t.Errorf("branch extensions = %v, want %v", sub.Context.Extensions, tc.extensions)
+			}
+			g, err := bob2.Resume(send(t, welcome).Welcome, sub.Tree, ga)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !sameExtensions(g.Context.Extensions, tc.extensions) {
+				t.Errorf("joiner's extensions = %v, want %v", g.Context.Extensions, tc.extensions)
+			}
+			if !bytes.Equal(g.EpochAuthenticator(), sub.EpochAuthenticator()) {
+				t.Error("joiner did not reach the same epoch")
+			}
+		})
+	}
+}
+
 // A branch is a new group and needs a new group ID. See RFC 9420,
 // Section 11.3.
 func TestBranchGroupID(t *testing.T) {
 	cs := testSuite()
 	_, _, _, ga, _, _ := setup(t, cs)
 	bob2 := newTestClient(t, cs, "bob")
-	if _, _, err := ga.Branch(ga.Context.GroupID, []*KeyPackage{bob2.KeyPackage}); !errors.Is(err, ErrSameGroupID) {
+	if _, _, err := ga.Branch(ga.Context.GroupID, nil, []*KeyPackage{bob2.KeyPackage}); !errors.Is(err, ErrSameGroupID) {
 		t.Errorf("Branch = %v, want %v", err, ErrSameGroupID)
 	}
 }
