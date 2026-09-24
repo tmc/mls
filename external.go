@@ -79,11 +79,9 @@ func (c *Client) JoinExternal(info *GroupInfo, tree RatchetTree) (*Group, *Messa
 		resumption:  make(map[uint64][]byte),
 	}
 
-	// The joiner takes the leftmost free leaf, as an Add would give
-	// it, and commits a path from there.
-	leaf := new(c.KeyPackage.LeafNode)
-	g.Index = g.Tree.Add(leaf)
-	g.Secrets = NewTreeSecrets(g.Index, c.EncryptionPriv)
+	// The joiner is not in g.Tree yet: commit places it in the
+	// leftmost free leaf once the proposals are applied.
+	leaf := &c.KeyPackage.LeafNode
 
 	proposals := []*Proposal{{Type: ProposalTypeExternalInit, ExternalInit: &ExternalInit{KEMOutput: kemOutput}}}
 	// A member rejoining after losing its state removes its own

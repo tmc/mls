@@ -394,18 +394,15 @@ func (g *Group) commit(extra []*Proposal, sender SenderType) (*Group, *Message, 
 		return nil, nil, nil, err
 	}
 	next.reinit = ch.reinit
-	if next.Tree.Leaf(g.Index) == nil {
-		return nil, nil, nil, ErrRemoved
-	}
-	// A resync commit removes the joiner's prior leaf, which may
-	// have been to the left of the one it just took; the joiner
-	// moves into the leftmost free leaf as the members will place
-	// it when they apply the commit.
 	if sender == SenderTypeNewMemberCommit {
-		leaf := new(*next.Tree.Leaf(g.Index))
-		next.Tree.Remove(g.Index)
-		next.Index = next.Tree.Add(leaf)
-		next.Secrets = NewTreeSecrets(next.Index, g.Secrets.Leaf)
+		// The joiner takes the leftmost free leaf once the
+		// proposals are applied, as the members will place it;
+		// a resync's Remove may free a leaf to the left of any
+		// that were free before. See RFC 9420, Section 12.4.3.2.
+		next.Index = next.Tree.Add(new(g.client.KeyPackage.LeafNode))
+		next.Secrets = NewTreeSecrets(next.Index, g.client.EncryptionPriv)
+	} else if next.Tree.Leaf(g.Index) == nil {
+		return nil, nil, nil, ErrRemoved
 	}
 	next.Context.Epoch = g.Context.Epoch + 1
 

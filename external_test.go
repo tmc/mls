@@ -126,6 +126,87 @@ func testJoinExternal(t *testing.T, cs CipherSuite) {
 	}
 }
 
+// TestJoinExternalResyncLeftmost checks a resync whose Remove frees a
+// leaf to the left of the tree's free leaves. The joiner must build
+// its path in the tree the members get by applying the Remove and
+// then placing it in the leftmost free leaf (RFC 9420, Section
+// 12.4.3.2), leaving the rest of the tree as it was. The IETF interop
+// harness's deep_random script found this.
+func TestJoinExternalResyncLeftmost(t *testing.T) {
+	cs := testSuite()
+	names := []string{"alice", "bob", "carol", "dave", "eve", "frank", "grace", "heidi"}
+	clients := make([]*Client, len(names))
+	var adds []*Proposal
+	for i, name := range names {
+		clients[i] = newTestClient(t, cs, name)
+		if i > 0 {
+			adds = append(adds, &Proposal{Type: ProposalTypeAdd, Add: &Add{KeyPackage: *clients[i].KeyPackage}})
+		}
+	}
+	a0, err := clients[0].NewGroup([]byte("group"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a1, _, welcome, err := a0.Commit(adds)
+	if err != nil {
+		t.Fatal(err)
+	}
+	groups := []*Group{a1}
+	for _, c := range clients[1:] {
+		g, err := c.Join(send(t, welcome).Welcome, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		groups = append(groups, g)
+	}
+
+	// Eve, at leaf 4, removes frank from leaf 5 and sets the node
+	// above leaves 4 to 7, which is on leaf 5's direct path but not
+	// on leaf 1's.
+	remove := &Proposal{Type: ProposalTypeRemove, Remove: &Remove{Removed: 5}}
+	next, commit, _, err := groups[4].Commit([]*Proposal{remove})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, g := range groups {
+		switch i {
+		case 4:
+			groups[i] = next
+		case 5:
+			groups[i] = nil
+		default:
+			if groups[i], err = g.Handle(send(t, commit)); err != nil {
+				t.Fatalf("%s handling eve's commit: %v", names[i], err)
+			}
+		}
+	}
+
+	// Bob, at leaf 1, rejoins; he must land back in leaf 1.
+	info, err := groups[0].GroupInfo()
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, commit, err := clients[1].JoinExternal(send(t, info).GroupInfo, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b.Index != 1 {
+		t.Errorf("bob rejoined at leaf %d, want 1", b.Index)
+	}
+	for i, g := range groups {
+		if g == nil || i == 1 {
+			continue
+		}
+		next, err := g.Handle(send(t, commit))
+		if err != nil {
+			t.Fatalf("%s handling the resync: %v", names[i], err)
+		}
+		if !bytes.Equal(next.EpochAuthenticator(), b.EpochAuthenticator()) {
+			t.Fatalf("%s disagrees with bob after the resync", names[i])
+		}
+	}
+}
+
 // members counts the non-blank leaves of a tree.
 func members(t RatchetTree) int {
 	n := 0
