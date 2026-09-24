@@ -349,6 +349,26 @@ func TestTreeOutOfRange(t *testing.T) {
 	}
 }
 
+// The resolution of a parent outside the tree is empty, and is found
+// without visiting every node of its subtree: for a parent near the
+// top of the index space that once took billions of calls.
+func TestResolutionOutOfRange(t *testing.T) {
+	tr := groupOf(t, 2).Tree
+	for _, x := range []NodeIndex{5, 11, 1<<31 | 1<<30 - 1, 1<<32 - 3} {
+		if got := tr.Resolution(x); got != nil {
+			t.Errorf("Resolution(%d) = %v, want nil", x, got)
+		}
+	}
+	// A parent whose subtree covers the whole tree and more
+	// resolves as the tree's root does.
+	want := tr.Resolution(root(tr.Size()))
+	for _, x := range []NodeIndex{7, 1<<20 - 1, 1<<31 - 1} {
+		if got := tr.Resolution(x); !slices.Equal(got, want) {
+			t.Errorf("Resolution(%d) = %v, want %v", x, got, want)
+		}
+	}
+}
+
 // A received tree must have the shape of RFC 9420, Section 12.4.3.1.
 // A node of the wrong kind for its position is hashed as blank but
 // was read as occupied elsewhere, and a node past the width of the

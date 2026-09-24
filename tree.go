@@ -111,6 +111,13 @@ func (t RatchetTree) Resolution(x NodeIndex) []NodeIndex {
 		if x.IsLeaf() {
 			return nil
 		}
+		// A subtree that starts past the end of the array is
+		// blank throughout. Descending it anyway costs a call per
+		// node, which for a parent far outside the tree is
+		// billions.
+		if first, _ := leavesUnder(x); int(first.NodeIndex()) >= len(t) {
+			return nil
+		}
 		return append(t.Resolution(x.left()), t.Resolution(x.right())...)
 	}
 	res := []NodeIndex{x}
