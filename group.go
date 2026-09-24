@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"maps"
+	"slices"
 	"time"
 )
 
@@ -618,7 +619,9 @@ func (g *Group) ApplyCommit(c *AuthenticatedContent) (*Group, error) {
 		}
 		sender = next.Tree.Add(new(LeafNode))
 	}
-	if next.Tree.Leaf(g.Index) == nil {
+	// A member the commit removes may find its leaf occupied again,
+	// by a client the same commit adds.
+	if next.Tree.Leaf(g.Index) == nil || slices.Contains(ch.added, g.Index) {
 		return nil, ErrRemoved
 	}
 	// An update the member itself proposed leaves a leaf whose

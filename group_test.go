@@ -185,6 +185,28 @@ func testGroup(t *testing.T, cs CipherSuite) {
 	}
 }
 
+// A member removed by a commit that also adds a client learns that it
+// was removed, even though the new client takes its leaf: an Add
+// fills the leftmost blank leaf, which the Remove has just vacated.
+func TestRemovedAndReplaced(t *testing.T) {
+	a, b, c := threeMember(t)
+	dave := newTestClient(t, a.CipherSuite, "dave")
+	_, commit, _, err := a.Commit([]*Proposal{
+		{Type: ProposalTypeRemove, Remove: &Remove{Removed: uint32(b.Index)}},
+		{Type: ProposalTypeAdd, Add: &Add{KeyPackage: *dave.KeyPackage}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	commit = send(t, commit)
+	if _, err := c.Handle(commit); err != nil {
+		t.Fatalf("carol: %v", err)
+	}
+	if _, err := b.Handle(commit); err != ErrRemoved {
+		t.Errorf("bob handling his own removal: %v, want %v", err, ErrRemoved)
+	}
+}
+
 // A joiner takes the leaf holding its key package's leaf node, not
 // just any leaf with its encryption key. See RFC 9420, Section
 // 12.4.3.1. Here a committer seats Mallory's signature key beside
