@@ -21,6 +21,15 @@ func skipUnapproved(t *testing.T, cs mls.CipherSuite) {
 	}
 }
 
+// testSuite returns the cipher suite for tests that need some suite
+// but not a particular one: an approved suite in FIPS 140-3 mode.
+func testSuite() mls.CipherSuite {
+	if fips140.Enabled() {
+		return mls.P256AES128GCMSHA256P256
+	}
+	return mls.X25519AES128GCMSHA256Ed25519
+}
+
 // newBinding returns a binding of a basic credential with the given
 // identity, signed under suite cs and bound to signatureKey.
 func newBinding(t *testing.T, cs mls.CipherSuite, identity string, signatureKey mls.SignaturePublicKey) multicred.Binding {
@@ -57,7 +66,7 @@ func TestCredential(t *testing.T) {
 			// Bindings may use suites other than the group's.
 			body := &multicred.Credential{Bindings: []multicred.Binding{
 				newBinding(t, cs, "alice@example.com", signatureKey),
-				newBinding(t, mls.X25519AES128GCMSHA256Ed25519, "alice@example.org", signatureKey),
+				newBinding(t, testSuite(), "alice@example.org", signatureKey),
 			}}
 			if err := body.Verify(signatureKey, nil); err != nil {
 				t.Fatalf("Verify: %v", err)
@@ -181,17 +190,17 @@ func TestNested(t *testing.T) {
 		}
 	}
 
-	skipUnapproved(t, mls.X25519AES128GCMSHA256Ed25519)
-	_, signatureKey, err := mls.X25519AES128GCMSHA256Ed25519.GenerateSignatureKeyPair()
+	cs := testSuite()
+	_, signatureKey, err := cs.GenerateSignatureKeyPair()
 	if err != nil {
 		t.Fatal(err)
 	}
 	inner := &multicred.Credential{Bindings: []multicred.Binding{
-		newBinding(t, mls.X25519AES128GCMSHA256Ed25519, "alice@example.com", signatureKey),
+		newBinding(t, cs, "alice@example.com", signatureKey),
 	}}
 	for _, typ := range []mls.CredentialType{multicred.TypeMulti, multicred.TypeWeakMulti} {
 		outer := &multicred.Credential{Bindings: []multicred.Binding{{
-			CipherSuite: mls.X25519AES128GCMSHA256Ed25519,
+			CipherSuite: cs,
 			Credential:  mls.Credential{Type: typ, Body: inner},
 		}}}
 		if _, err := mls.Marshal(outer); !errors.Is(err, multicred.ErrNested) {
@@ -204,8 +213,7 @@ func TestNested(t *testing.T) {
 }
 
 func TestMaxBindings(t *testing.T) {
-	cs := mls.X25519AES128GCMSHA256Ed25519
-	skipUnapproved(t, cs)
+	cs := testSuite()
 	_, signatureKey, err := cs.GenerateSignatureKeyPair()
 	if err != nil {
 		t.Fatal(err)

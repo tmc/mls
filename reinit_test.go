@@ -39,7 +39,7 @@ func setup(t *testing.T, cs CipherSuite) (*Client, *Client, *Client, *Group, *Gr
 // proposal, a commit covering it, and the new group that carries the
 // membership over.
 func TestReinit(t *testing.T) {
-	cs := X25519AES128GCMSHA256Ed25519
+	cs := testSuite()
 	alice, bob, carol, ga, gb, gc := setup(t, cs)
 
 	ri := &Reinit{GroupID: []byte("successor"), Version: Version10, CipherSuite: cs}
@@ -120,7 +120,7 @@ func TestReinit(t *testing.T) {
 // TestBranch covers RFC 9420, Section 11.3: a member forms a subgroup
 // of the original group's members.
 func TestBranch(t *testing.T) {
-	cs := X25519AES128GCMSHA256Ed25519
+	cs := testSuite()
 	_, bob, _, ga, _, _ := setup(t, cs)
 
 	bob2 := newTestClient(t, cs, "bob")
@@ -158,7 +158,7 @@ func TestBranch(t *testing.T) {
 // A branch is a new group and needs a new group ID. See RFC 9420,
 // Section 11.3.
 func TestBranchGroupID(t *testing.T) {
-	cs := X25519AES128GCMSHA256Ed25519
+	cs := testSuite()
 	_, _, _, ga, _, _ := setup(t, cs)
 	bob2 := newTestClient(t, cs, "bob")
 	if _, _, err := ga.Branch(ga.Context.GroupID, []*KeyPackage{bob2.KeyPackage}); !errors.Is(err, ErrSameGroupID) {
@@ -170,7 +170,7 @@ func TestBranchGroupID(t *testing.T) {
 // Reinit, not from an earlier one whose resumption key a member also
 // holds.
 func TestResumeReinitEpoch(t *testing.T) {
-	cs := X25519AES128GCMSHA256Ed25519
+	cs := testSuite()
 	_, _, _, ga, gb, _ := setup(t, cs)
 	ri := &Reinit{GroupID: []byte("successor"), Version: Version10, CipherSuite: cs}
 	ga2, commit, _, err := ga.Commit([]*Proposal{{Type: ProposalTypeReinit, Reinit: ri}})
@@ -198,7 +198,7 @@ func TestResumeReinitEpoch(t *testing.T) {
 // A welcome links the new group to at most one old one. See RFC 9420,
 // Section 12.4.3.1.
 func TestResumeTwoPSKs(t *testing.T) {
-	cs := X25519AES128GCMSHA256Ed25519
+	cs := testSuite()
 	alice, _, _, ga, _, _ := setup(t, cs)
 	branch := func(nonce byte) *Proposal {
 		id := PreSharedKeyID{

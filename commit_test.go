@@ -33,7 +33,7 @@ func TestPathRequired(t *testing.T) {
 // threeMember returns alice, bob and carol's views of one epoch.
 func threeMember(t *testing.T) (a, b, c *Group) {
 	t.Helper()
-	cs := X25519AES128GCMSHA256Ed25519
+	cs := testSuite()
 	alice := newTestClient(t, cs, "alice")
 	bob := newTestClient(t, cs, "bob")
 	carol := newTestClient(t, cs, "carol")

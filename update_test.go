@@ -36,7 +36,7 @@ func rotate(t *testing.T, g *Group, c *Client) (*LeafNode, []byte, []byte) {
 // the leaf key the update installs, so only the proposer can decrypt
 // them, and only if it kept the private half.
 func TestProposeUpdate(t *testing.T) {
-	cs := X25519AES128GCMSHA256Ed25519
+	cs := testSuite()
 	alice, bob := newTestClient(t, cs, "alice"), newTestClient(t, cs, "bob")
 	ga, err := alice.NewGroup([]byte("group"), nil)
 	if err != nil {
@@ -95,7 +95,7 @@ func TestProposeUpdate(t *testing.T) {
 
 // TestProposeUpdateErrors covers the ways an update goes wrong.
 func TestProposeUpdateErrors(t *testing.T) {
-	cs := X25519AES128GCMSHA256Ed25519
+	cs := testSuite()
 	alice, bob := newTestClient(t, cs, "alice"), newTestClient(t, cs, "bob")
 	ga, err := alice.NewGroup([]byte("group"), nil)
 	if err != nil {
@@ -157,7 +157,7 @@ func TestProposeUpdateErrors(t *testing.T) {
 // commit from carrying its own sender's update, so the commit leaves
 // it behind; the update path replaces the sender's leaf anyway.
 func TestCommitDropsOwnUpdate(t *testing.T) {
-	cs := X25519AES128GCMSHA256Ed25519
+	cs := testSuite()
 	alice, bob := newTestClient(t, cs, "alice"), newTestClient(t, cs, "bob")
 	ga, err := alice.NewGroup([]byte("group"), nil)
 	if err != nil {

@@ -19,7 +19,7 @@ type replayFixture struct {
 
 func newReplayFixture(t *testing.T) *replayFixture {
 	t.Helper()
-	cs := X25519AES128GCMSHA256Ed25519
+	cs := testSuite()
 	accept := func(*AuthenticatedContent) error { return nil }
 	senders := func() (priv []byte, ext Extensions) {
 		priv, pub, err := cs.GenerateSignatureKeyPair()

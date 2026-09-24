@@ -10,7 +10,7 @@ import (
 // lets a party outside a group send it a proposal: an external sender
 // the group provisioned, and a client proposing its own addition.
 func TestExternalProposal(t *testing.T) {
-	cs := X25519AES128GCMSHA256Ed25519
+	cs := testSuite()
 	alice := newTestClient(t, cs, "alice")
 	bob := newTestClient(t, cs, "bob")
 	carol := newTestClient(t, cs, "carol")
@@ -104,7 +104,7 @@ func TestExternalProposal(t *testing.T) {
 
 // TestExternalProposalRules checks what an external sender may not do.
 func TestExternalProposalRules(t *testing.T) {
-	cs := X25519AES128GCMSHA256Ed25519
+	cs := testSuite()
 	alice := newTestClient(t, cs, "alice")
 	priv, pub, err := cs.GenerateSignatureKeyPair()
 	if err != nil {
@@ -157,7 +157,7 @@ func TestExternalProposalRules(t *testing.T) {
 // policy accepts it; without one, a stranger asking to join would be
 // added by the next commit of any member.
 func TestExternalProposalPolicy(t *testing.T) {
-	cs := X25519AES128GCMSHA256Ed25519
+	cs := testSuite()
 	eve := newTestClient(t, cs, "eve")
 	errNo := errors.New("not eve")
 	tests := []struct {

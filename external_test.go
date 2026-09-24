@@ -180,7 +180,7 @@ func TestExternalCommitRules(t *testing.T) {
 // whose checks cost far more, so that an unsigned group info costs
 // the joiner one signature verification.
 func TestJoinExternalChecksSignatureFirst(t *testing.T) {
-	cs := X25519AES128GCMSHA256Ed25519
+	cs := testSuite()
 	a1, _, _ := threeMember(t)
 	msg, err := a1.GroupInfo()
 	if err != nil {

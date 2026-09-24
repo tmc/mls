@@ -85,8 +85,7 @@ func TestSecretTreeVectors(t *testing.T) {
 // A ratchet is spent only when the caller says so, and refuses a jump
 // it cannot afford.
 func TestRatchetKeyBounds(t *testing.T) {
-	cs := X25519AES128GCMSHA256Ed25519
-	skipUnapproved(t, cs)
+	cs := testSuite()
 	tr := newSecretTree(cs, 2, make([]byte, cs.HashSize()))
 	r, err := tr.ratchet(0, ContentTypeApplication)
 	if err != nil {

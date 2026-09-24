@@ -11,7 +11,7 @@ import (
 // copy of the array alone still shares them, and RatchetTree.Add
 // writes to the nodes above the leaf it fills.
 func TestEpochIsolation(t *testing.T) {
-	cs := X25519AES128GCMSHA256Ed25519
+	cs := testSuite()
 	add := func(c *Client) *Proposal {
 		return &Proposal{Type: ProposalTypeAdd, Add: &Add{KeyPackage: *c.KeyPackage}}
 	}

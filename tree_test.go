@@ -127,7 +127,7 @@ func TestTreeOperationVectors(t *testing.T) {
 // groupOf returns the committer's view of a group of n members.
 func groupOf(t *testing.T, n int) *Group {
 	t.Helper()
-	cs := X25519AES128GCMSHA256Ed25519
+	cs := testSuite()
 	alice := newTestClient(t, cs, "alice")
 	g, err := alice.NewGroup([]byte("group"), nil)
 	if err != nil {
@@ -202,7 +202,7 @@ func TestVerifyNodeKeys(t *testing.T) {
 // level higher.
 func unmergedGroup(t *testing.T) *Group {
 	t.Helper()
-	cs := X25519AES128GCMSHA256Ed25519
+	cs := testSuite()
 	alice := newTestClient(t, cs, "alice")
 	erin := newTestClient(t, cs, "erin")
 	g, err := alice.NewGroup([]byte("group"), nil)

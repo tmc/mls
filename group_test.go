@@ -17,6 +17,15 @@ func skipUnapproved(t testing.TB, cs CipherSuite) {
 	}
 }
 
+// testSuite returns the cipher suite for tests that need some suite
+// but not a particular one: an approved suite in FIPS 140-3 mode.
+func testSuite() CipherSuite {
+	if fips140.Enabled() {
+		return P256AES128GCMSHA256P256
+	}
+	return X25519AES128GCMSHA256Ed25519
+}
+
 func newTestClient(t testing.TB, cs CipherSuite, name string) *Client {
 	t.Helper()
 	skipUnapproved(t, cs)
@@ -181,7 +190,7 @@ func testGroup(t *testing.T, cs CipherSuite) {
 // 12.4.3.1. Here a committer seats Mallory's signature key beside
 // Bob's encryption key and addresses the welcome to Bob.
 func TestJoinOwnLeaf(t *testing.T) {
-	cs := X25519AES128GCMSHA256Ed25519
+	cs := testSuite()
 	alice := newTestClient(t, cs, "alice")
 	bob := newTestClient(t, cs, "bob")
 	mallory := newTestClient(t, cs, "mallory")
@@ -220,13 +229,13 @@ func TestJoinOwnLeaf(t *testing.T) {
 // suite it expects: the welcome's cipher suite covers only the
 // welcome itself.
 func TestJoinGroupContext(t *testing.T) {
-	cs := X25519AES128GCMSHA256Ed25519
+	cs := testSuite()
 	tests := []struct {
 		name   string
 		mutate func(*GroupContext)
 		want   error
 	}{
-		{"cipher suite", func(c *GroupContext) { c.CipherSuite = P256AES128GCMSHA256P256 }, ErrUnsupportedCipherSuite},
+		{"cipher suite", func(c *GroupContext) { c.CipherSuite = P384AES256GCMSHA384P384 }, ErrUnsupportedCipherSuite},
 		{"version", func(c *GroupContext) { c.Version = Version10 + 1 }, ErrUnsupportedVersion},
 	}
 	for _, tt := range tests {

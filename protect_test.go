@@ -511,6 +511,8 @@ func TestSenderDataGenerationBound(t *testing.T) {
 func TestProtectPadding(t *testing.T) {
 	for _, pad := range []int{0, 1, 64} {
 		t.Run(fmt.Sprint(pad), func(t *testing.T) {
+			// Ed25519 signatures have a fixed size, so only
+			// the plaintext varies the padded length.
 			cs := X25519AES128GCMSHA256Ed25519
 			alice := newTestClient(t, cs, "alice")
 			bob := newTestClient(t, cs, "bob")

@@ -6,7 +6,7 @@ import (
 )
 
 func TestParseHeader(t *testing.T) {
-	cs := X25519AES128GCMSHA256Ed25519
+	cs := testSuite()
 	alice := newTestClient(t, cs, "alice")
 	bob := newTestClient(t, cs, "bob")
 	g, err := alice.NewGroup([]byte("group"), nil)

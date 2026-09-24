@@ -159,7 +159,7 @@ func externalPSK(id string) *Proposal {
 // alongside a good one and checks that the commit carries only the
 // good one.
 func TestStagedInvalidLeftOut(t *testing.T) {
-	cs := X25519AES128GCMSHA256Ed25519
+	cs := testSuite()
 	psk := func(id PreSharedKeyID) ([]byte, error) {
 		if string(id.PSKID) == "known" {
 			return make([]byte, 32), nil

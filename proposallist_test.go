@@ -8,7 +8,7 @@ import (
 // TestProposalList checks the rules RFC 9420, Section 12.2 places on
 // the list of proposals a commit covers.
 func TestProposalList(t *testing.T) {
-	cs := X25519AES128GCMSHA256Ed25519
+	cs := testSuite()
 	alice := newTestClient(t, cs, "alice")
 	bob := newTestClient(t, cs, "bob")
 	carol := newTestClient(t, cs, "carol")
@@ -82,7 +82,7 @@ func TestProposalList(t *testing.T) {
 // A group_context_extensions proposal need not be met by a member
 // the same commit removes. See RFC 9420, Section 12.1.7.
 func TestRequiredCapabilitiesRemoved(t *testing.T) {
-	cs := X25519AES128GCMSHA256Ed25519
+	cs := testSuite()
 	const custom ProposalType = 0xf000
 	capable := func(name string) *Client {
 		c := newTestClient(t, cs, name)
