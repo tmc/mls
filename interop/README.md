@@ -43,7 +43,7 @@ current `protoc-gen-go-grpc`, hence the `go get`.
 
 The runner at cfd4502 has an aliasing bug in `combinations`: it
 appends to shared slices, so in its default "all assignments" mode
-scripts with three or more actors run duplicate client assignments and
+scripts with four or more actors run duplicate client assignments and
 skip others. The results below were produced with this one-line fix:
 
 	-			out = append(out, append(tuple, v))
@@ -74,7 +74,9 @@ encrypted), and one assignment of clients to actors. "tmc ↔ openmls"
 counts every assignment that uses both clients, so it covers each
 client in each role. U marks cells whose failures are all
 Unimplemented (see below). tmc/mls also runs suites 5 and 7, which
-openmls does not support, so only tmc ↔ tmc covers them.
+openmls does not support, so only tmc ↔ tmc covers them. The
+external_join and branch configs were rerun after `JoinExternal`
+gained pre-shared keys and `Branch` gained extensions.
 
 | config | script | tmc ↔ tmc | tmc ↔ openmls | openmls ↔ openmls |
 |---|---|---|---|---|
@@ -98,7 +100,7 @@ openmls does not support, so only tmc ↔ tmc covers them.
 | external_join | removing_prior | 10/10 | 12/12 | 6/6 |
 | external_join | with_external_tree | 10/10 | 12/12 | 6/6 |
 | external_join | with_more_members | 10/10 | 180/180 | 6/6 |
-| external_join | with_psk | 0/10 U | 6/12 U | 6/6 |
+| external_join | with_psk | 10/10 | 12/12 | 6/6 |
 | external_proposals | external_add | 10/10 | 84/84 | 6/6 |
 | external_proposals | external_psk | 10/10 | 84/84 | 6/6 |
 | external_proposals | external_reinit | 10/10 | 0/84 U | 0/6 U |
@@ -116,7 +118,7 @@ openmls does not support, so only tmc ↔ tmc covers them.
 | branch | base | 10/10 | 180/180 | 6/6 |
 | branch | external_tree | 10/10 | 180/180 | 6/6 |
 | branch | force_path | 10/10 | 180/180 | 6/6 |
-| branch | with_extensions | 0/10 U | 90/180 U | 6/6 |
+| branch | with_extensions | 10/10 | 180/180 | 6/6 |
 
 deep_random (about 1,400 steps) is too large to run for every
 assignment, so it was run three times with `-random`, which picks
@@ -143,13 +145,6 @@ No openmls bugs turned up.
 
 ## Unimplemented
 
-- **external_join/with_psk** as the joiner: `mls.Client.JoinExternal`
-  has no way to include PreSharedKey proposals in the external commit
-  (RFC 9420, Section 12.4.3.2 allows them). tmc/mls processes such a
-  commit from openmls correctly.
-- **branch/with_extensions** as the brancher: `mls.Group.Branch`
-  keeps the parent group's extensions. RFC 9420, Section 11.3 does
-  not require that a branch be able to change them.
 - **reinit**, **external_proposals/external_reinit** against openmls:
   openmls's interop client does not implement reinitialization.
 
