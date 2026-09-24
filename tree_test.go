@@ -236,7 +236,7 @@ func unmergedGroup(t *testing.T) *Group {
 	if eg, err = eg.Handle(send(t, msg)); err != nil {
 		t.Fatal(err)
 	}
-	eg, msg, _, err = eg.Commit(nil)
+	_, msg, _, err = eg.Commit(nil)
 	if err != nil {
 		t.Fatal(err)
 	}

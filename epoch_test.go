@@ -48,7 +48,7 @@ func TestEpochIsolation(t *testing.T) {
 
 	erin := newTestClient(t, cs, "erin")
 	want := hash(t, g)
-	next, commit, welcome, err := g.Commit([]*Proposal{add(erin)})
+	next, _, welcome, err := g.Commit([]*Proposal{add(erin)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,7 +74,7 @@ func TestEpochIsolation(t *testing.T) {
 	// alone, for a member that keeps the old epoch to process
 	// messages still in flight.
 	frank := newTestClient(t, cs, "frank")
-	_, commit, _, err = next.Commit([]*Proposal{add(frank)})
+	_, commit, _, err := next.Commit([]*Proposal{add(frank)})
 	if err != nil {
 		t.Fatal(err)
 	}
