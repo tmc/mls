@@ -35,6 +35,11 @@ type Client struct {
 	// application; a nil ExternalProposal accepts none. Members
 	// should share a policy, since a member that did not accept a
 	// proposal cannot process a commit that covers it.
+	//
+	// Such a proposal names its group only by group ID and epoch:
+	// its signature does not cover the group context (RFC 9420,
+	// Section 6.1). A group whose ID is not unique, as Section 11
+	// asks, accepts proposals meant for another group of that ID.
 	ExternalProposal func(c *AuthenticatedContent) error
 
 	// Padding blurs the length of the messages [Group.Protect]
