@@ -53,6 +53,16 @@ openmls:
 
 	cd openmls && cargo build --release -j 4 -p interop_client
 
+openmls's interop client offers only suites 1–3. For the
+post-quantum suites (see below), three local changes to
+`interop_client` are needed: enable the `draft-ietf-mls-pq-ciphersuites`
+feature on its `openmls`, `openmls_rust_crypto` and
+`openmls_basic_credential` dependencies; add the PQ suites to the lists
+in `to_ciphersuite` and `supported_ciphersuites`; and add the
+requested suite to the `Capabilities` of the key packages it builds
+(in `create_key_package` and the external join), which otherwise list
+suites 1–3 and make openmls refuse its own key package.
+
 ## Running
 
 	./tmc-interop -port 50061 &
@@ -65,6 +75,8 @@ script's actors, for every suite both support, with handshake messages
 both public and encrypted. That covers tmc/mls and openmls in each
 role, and each against itself. With `-client localhost:50061` alone it
 runs tmc/mls against itself over every suite tmc/mls supports.
+`SupportedCiphersuites` scans every code point, since the provisional
+post-quantum ones lie across the whole range.
 
 ## Results
 
@@ -142,6 +154,57 @@ with a regression test:
   (RFC 9420, Section 12.4.3.2). Only deep_random caught it.
 
 No openmls bugs turned up.
+
+### Post-quantum cipher suites
+
+tmc/mls implements the eleven suites of
+draft-ietf-mls-pq-ciphersuites-06 at provisional code points (see the
+package documentation). openmls, with the changes above, has eight of
+them at the same code points; it has no MLKEM768-P256 or
+MLKEM1024-P384 hybrid, so tmc/mls runs those three alone. Results
+from 2026-09-25, counted as above, summed over the scripts of each
+config (welcome_join: 4 scripts; application: 3; commit: 9):
+
+| suite | code point | config | tmc ↔ tmc | tmc ↔ openmls | openmls ↔ openmls |
+|---|---|---|---|---|---|
+| MLKEM768X25519_AES128GCM_SHA256_Ed25519 | 0x004F | welcome_join | 8/8 | 16/16 | 8/8 |
+|  |  | application | 6/6 | 12/12 | 6/6 |
+|  |  | commit | 18/18 | 836/836 | 18/18 |
+| MLKEM768X25519_AES256GCM_SHA384_Ed25519 | 0x004E | welcome_join | 8/8 | 16/16 | 8/8 |
+|  |  | application | 6/6 | 12/12 | 6/6 |
+|  |  | commit | 18/18 | 836/836 | 18/18 |
+| MLKEM768P256_AES128GCM_SHA256_P256 | 0xF003 | welcome_join | 8/8 | — | — |
+|  |  | application | 6/6 | — | — |
+|  |  | commit | 18/18 | — | — |
+| MLKEM768P256_AES256GCM_SHA384_P256 | 0xF004 | welcome_join | 8/8 | — | — |
+|  |  | application | 6/6 | — | — |
+|  |  | commit | 18/18 | — | — |
+| MLKEM1024P384_AES256GCM_SHA384_P384 | 0xF005 | welcome_join | 8/8 | — | — |
+|  |  | application | 6/6 | — | — |
+|  |  | commit | 18/18 | — | — |
+| MLKEM768_AES256GCM_SHA384_Ed25519 | 0xF042 | welcome_join | 8/8 | 16/16 | 8/8 |
+|  |  | application | 6/6 | 12/12 | 6/6 |
+|  |  | commit | 18/18 | 836/836 | 18/18 |
+| MLKEM768_AES256GCM_SHA384_P256 | 0x0050 | welcome_join | 8/8 | 16/16 | 8/8 |
+|  |  | application | 6/6 | 12/12 | 6/6 |
+|  |  | commit | 18/18 | 836/836 | 18/18 |
+| MLKEM1024_AES256GCM_SHA384_P384 | 0x0042 | welcome_join | 8/8 | 16/16 | 8/8 |
+|  |  | application | 6/6 | 12/12 | 6/6 |
+|  |  | commit | 18/18 | 836/836 | 18/18 |
+| MLKEM768X25519_CHACHA20POLY1305_SHA384_MLDSA44 | 0x0052 | welcome_join | 8/8 | 16/16 | 8/8 |
+|  |  | application | 6/6 | 12/12 | 6/6 |
+|  |  | commit | 18/18 | 836/836 | 18/18 |
+| MLKEM768_AES256GCM_SHA384_MLDSA65 | 0x0051 | welcome_join | 8/8 | 16/16 | 8/8 |
+|  |  | application | 6/6 | 12/12 | 6/6 |
+|  |  | commit | 18/18 | 836/836 | 18/18 |
+| MLKEM1024_AES256GCM_SHA384_MLDSA87 | 0x0907 | welcome_join | 8/8 | 16/16 | 8/8 |
+|  |  | application | 6/6 | 12/12 | 6/6 |
+|  |  | commit | 18/18 | 836/836 | 18/18 |
+
+All of these pass, including ML-DSA signatures and the
+MLKEM768-X25519 (X-Wing) KEM in both directions, which checks the
+KEMs, DeriveKeyPair and the signature encoding against an independent
+implementation (hpke-rs, libcrux and RustCrypto's ml-dsa).
 
 ## Unimplemented
 

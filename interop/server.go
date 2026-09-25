@@ -272,9 +272,11 @@ func (s *server) Name(context.Context, *pb.NameRequest) (*pb.NameResponse, error
 }
 
 func (s *server) SupportedCiphersuites(context.Context, *pb.SupportedCiphersuitesRequest) (*pb.SupportedCiphersuitesResponse, error) {
+	// Every code point, since the provisional ones of the
+	// post-quantum suites lie across the whole range.
 	var suites []uint32
-	for cs := mls.CipherSuite(1); cs < 0x100; cs++ {
-		if cs.Supported() {
+	for i := 1; i <= 0xFFFF; i++ {
+		if cs := mls.CipherSuite(i); cs.Supported() {
 			suites = append(suites, uint32(cs))
 		}
 	}
