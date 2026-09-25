@@ -86,7 +86,8 @@ encrypted), and one assignment of clients to actors. "tmc ↔ openmls"
 counts every assignment that uses both clients, so it covers each
 client in each role. U marks cells whose failures are all
 Unimplemented (see below). tmc/mls also runs suites 5 and 7, which
-openmls does not support, so only tmc ↔ tmc covers them. The
+openmls does not support, so only tmc ↔ tmc covers them. The table
+predates suites 4 and 6; their results are listed separately below. The
 external_join and branch configs were rerun after `JoinExternal`
 gained pre-shared keys and `Branch` gained extensions.
 
@@ -154,6 +155,61 @@ with a regression test:
   (RFC 9420, Section 12.4.3.2). Only deep_random caught it.
 
 No openmls bugs turned up.
+
+### X448 cipher suites
+
+Suites 4 (MLS_256_DHKEMX448_AES256GCM_SHA512_Ed448) and 6
+(MLS_256_DHKEMX448_CHACHA20POLY1305_SHA512_Ed448) are not in openmls's
+interop client, so only tmc ↔ tmc covers them. Results from
+2026-09-25, with `-suite 4` and `-suite 6`: each cell counts both
+suites in both handshake modes.
+
+| config | script | tmc ↔ tmc |
+|---|---|---|
+| welcome_join | no_path_secret | 4/4 |
+| welcome_join | with_external_tree | 4/4 |
+| welcome_join | with_path_secret | 4/4 |
+| welcome_join | with_psk | 4/4 |
+| application | in_order | 4/4 |
+| application | out_of_order_across_epochs | 4/4 |
+| application | out_of_order_within_epoch | 4/4 |
+| commit | add | 4/4 |
+| commit | all_together_alice_proposes | 4/4 |
+| commit | all_together_bob_proposes | 4/4 |
+| commit | empty | 4/4 |
+| commit | external_psk | 4/4 |
+| commit | group_context_extensions | 4/4 |
+| commit | remove | 4/4 |
+| commit | resumption_psk | 4/4 |
+| commit | update | 4/4 |
+| external_join | normal | 4/4 |
+| external_join | removing_prior | 4/4 |
+| external_join | with_external_tree | 4/4 |
+| external_join | with_more_members | 4/4 |
+| external_join | with_psk | 4/4 |
+| external_proposals | external_add | 4/4 |
+| external_proposals | external_psk | 4/4 |
+| external_proposals | external_reinit | 4/4 |
+| external_proposals | external_remove | 4/4 |
+| external_proposals | group_context_extensions | 4/4 |
+| external_proposals | joiner_signed_add | 4/4 |
+| external_proposals | multiple_external | 4/4 |
+| external_proposals | resumption_psk | 4/4 |
+| reinit | all_same_actor | 4/4 |
+| reinit | change_ciphersuite | 4/4 |
+| reinit | change_extensions | 4/4 |
+| reinit | change_group_id | 4/4 |
+| reinit | external_tree | 4/4 |
+| reinit | force_path | 4/4 |
+| branch | base | 4/4 |
+| branch | external_tree | 4/4 |
+| branch | force_path | 4/4 |
+| branch | with_extensions | 4/4 |
+| deep_random | random (`-random`) | 4/4 |
+
+An independent check of these suites comes from the working group's
+test vectors, which include suites 4 and 6 and which tmc/mls passes
+(see the package README).
 
 ### Post-quantum cipher suites
 
