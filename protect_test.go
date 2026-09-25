@@ -128,7 +128,7 @@ func TestMessageProtectionVectors(t *testing.T) {
 		cs := vec.CipherSuite
 		t.Run(cs.String(), func(t *testing.T) {
 			if !cs.Supported() {
-				t.Skipf("%s is not implementable with the Go standard library", cs)
+				t.Skipf("%s is not supported", cs)
 			}
 			if _, err := cs.AEAD(make([]byte, cs.AEADKeySize())); err != nil {
 				t.Skipf("%v", err)

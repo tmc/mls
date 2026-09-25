@@ -111,7 +111,7 @@ func TestCryptoBasicsVectors(t *testing.T) {
 		cs := vec.CipherSuite
 		t.Run(cs.String(), func(t *testing.T) {
 			if !cs.Supported() {
-				t.Skipf("%s is not implementable with the Go standard library", cs)
+				t.Skipf("%s is not supported", cs)
 			}
 
 			r := vec.RefHash
@@ -209,6 +209,8 @@ func TestFIPS140Mode(t *testing.T) {
 		MLKEM768X25519AES128GCMSHA256Ed25519,
 		MLKEM768X25519AES256GCMSHA384Ed25519,
 		MLKEM768X25519ChaCha20Poly1305SHA384MLDSA44,
+		X448AES256GCMSHA512Ed448,
+		X448ChaCha20Poly1305SHA512Ed448,
 	} {
 		if cs.Supported() {
 			t.Errorf("%v: Supported = true in FIPS 140-3 mode", cs)

@@ -19,15 +19,14 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/tmc/mls/internal/hpkex448"
 	"github.com/tmc/mls/tlssyntax"
 	"golang.org/x/crypto/chacha20poly1305"
 )
 
 // ErrUnsupportedCipherSuite is reported for cipher suites this
-// package cannot implement. RFC 9420 suites 4 and 6 use X448 and
-// Ed448, which the Go standard library does not provide. In FIPS 140-3
-// mode, the suites that use X25519 are unsupported too; see the
-// package documentation.
+// package cannot implement. In FIPS 140-3 mode, the suites that use
+// X25519 or X448 are unsupported; see the package documentation.
 var ErrUnsupportedCipherSuite = errors.New("mls: unsupported cipher suite")
 
 // A signatureScheme is the signature algorithm of a cipher suite.
@@ -37,13 +36,15 @@ const (
 	signatureEd25519 signatureScheme = iota
 	signatureECDSA
 	signatureMLDSA
+	signatureEd448
 )
 
 // params are the cryptographic primitives of a cipher suite.
 // See RFC 9420, Section 17.1.
 type params struct {
 	hash      crypto.Hash
-	curve     ecdh.Curve
+	curve     ecdh.Curve // nil if x448
+	x448      bool       // KEM is DHKEM(X448, HKDF-SHA512); see suite448.go
 	kdf       func() hpke.KDF
 	aead      func() hpke.AEAD
 	keySize   int  // AEAD key size, Nk
@@ -143,6 +144,16 @@ var suiteParams = map[CipherSuite]*params{
 		kdf: hpke.HKDFSHA384, aead: hpke.AES256GCM, keySize: 32, nonceSize: 12, kemSize: 64,
 		sig: signatureMLDSA, mldsa: mldsa.MLDSA87(), fips: true,
 	},
+	X448AES256GCMSHA512Ed448: {
+		hash: crypto.SHA512, x448: true,
+		keySize: 32, nonceSize: 12, kemSize: 56,
+		sig: signatureEd448,
+	},
+	X448ChaCha20Poly1305SHA512Ed448: {
+		hash: crypto.SHA512, x448: true,
+		keySize: 32, nonceSize: 12, chacha: true, kemSize: 56,
+		sig: signatureEd448,
+	},
 }
 
 func (cs CipherSuite) params() (*params, error) {
@@ -182,8 +193,8 @@ func ecdsaHash(c elliptic.Curve) crypto.Hash {
 }
 
 // Supported reports whether this package implements cs. In FIPS 140-3
-// mode it reports false for the suites that use X25519, and built
-// with GOFIPS140=v1.0.0 for the suites that use ML-DSA.
+// mode it reports false for the suites that use X25519 or X448, and
+// built with GOFIPS140=v1.0.0 for the suites that use ML-DSA.
 func (cs CipherSuite) Supported() bool {
 	_, err := cs.params()
 	return err == nil
@@ -316,6 +327,8 @@ func (cs CipherSuite) SignWithLabel(priv []byte, label string, content []byte) (
 			return err
 		})
 		return sig, err
+	case signatureEd448:
+		return signEd448(priv, msg)
 	default:
 		h := ecdsaHash(p.sigCurve).New()
 		h.Write(msg)
@@ -362,6 +375,8 @@ func (cs CipherSuite) VerifyWithLabel(pub SignaturePublicKey, label string, cont
 		if mldsa.Verify(key, msg, sig, nil) != nil {
 			return ErrBadSignature
 		}
+	case signatureEd448:
+		return verifyEd448(pub, msg, sig)
 	default:
 		key, err := ecdsa.ParseUncompressedPublicKey(p.sigCurve, pub)
 		if err != nil {
@@ -396,6 +411,9 @@ func (cs CipherSuite) EncryptWithLabel(pub HPKEPublicKey, label string, context,
 	if err != nil {
 		return nil, err
 	}
+	if p.x448 {
+		return p.seal448(pub, info, plaintext)
+	}
 	key, err := p.hpkeKEM().NewPublicKey(pub)
 	if err != nil {
 		return nil, err
@@ -426,6 +444,9 @@ func (cs CipherSuite) DecryptWithLabel(priv []byte, label string, context []byte
 	info, err := encryptContext(label, context)
 	if err != nil {
 		return nil, err
+	}
+	if p.x448 {
+		return p.open448(priv, info, ct)
 	}
 	var pt []byte
 	err = withDIT(func() error {
@@ -554,6 +575,9 @@ func (cs CipherSuite) DeriveKeyPair(ikm []byte) (priv []byte, pub HPKEPublicKey,
 	if err != nil {
 		return nil, nil, err
 	}
+	if p.x448 {
+		return hpkeKeyPair448(func() ([]byte, []byte, error) { return hpkex448.DeriveKeyPair(ikm) })
+	}
 	err = withDIT(func() error {
 		key, err := p.hpkeKEM().DeriveKeyPair(ikm)
 		if err != nil {
@@ -575,6 +599,9 @@ func (cs CipherSuite) GenerateKeyPair() (priv []byte, pub HPKEPublicKey, err err
 	p, err := cs.params()
 	if err != nil {
 		return nil, nil, err
+	}
+	if p.x448 {
+		return hpkeKeyPair448(hpkex448.GenerateKey)
 	}
 	err = withDIT(func() error {
 		key, err := p.hpkeKEM().GenerateKey()
@@ -614,6 +641,9 @@ func (cs CipherSuite) GenerateSignatureKeyPair() (priv []byte, pub SignaturePubl
 			}
 			priv, pub = key.Bytes(), key.PublicKey().Bytes()
 			return nil
+		case signatureEd448:
+			priv, pub, err = generateEd448()
+			return err
 		default:
 			key, err := ecdsa.GenerateKey(p.sigCurve, rand.Reader)
 			if err != nil {
@@ -639,6 +669,13 @@ func (cs CipherSuite) PublicKey(priv []byte) (HPKEPublicKey, error) {
 	if err != nil {
 		return nil, err
 	}
+	if p.x448 {
+		_, pub, err := hpkeKeyPair448(func() ([]byte, []byte, error) {
+			pub, err := hpkex448.PublicKey(priv)
+			return priv, pub, err
+		})
+		return pub, err
+	}
 	var pub HPKEPublicKey
 	err = withDIT(func() error {
 		key, err := p.hpkeKEM().NewPrivateKey(pad(priv, p.kemSize))
@@ -662,6 +699,9 @@ func (cs CipherSuite) ExternalInit(externalPub HPKEPublicKey) (kemOutput, initSe
 	p, err := cs.params()
 	if err != nil {
 		return nil, nil, err
+	}
+	if p.x448 {
+		return p.sendExport448(externalPub, externalInitLabel, cs.HashSize())
 	}
 	key, err := p.hpkeKEM().NewPublicKey(externalPub)
 	if err != nil {

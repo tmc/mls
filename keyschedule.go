@@ -112,6 +112,10 @@ func (ks *keySchedule) ExternalPub() (HPKEPublicKey, error) {
 	if err != nil {
 		return nil, err
 	}
+	if p.x448 {
+		_, pub, err := ks.CipherSuite.DeriveKeyPair(ks.ExternalSecret)
+		return pub, err
+	}
 	var pub HPKEPublicKey
 	err = withDIT(func() error {
 		key, err := p.hpkeKEM().DeriveKeyPair(ks.ExternalSecret)
@@ -200,6 +204,13 @@ func (ks *keySchedule) ExternalInit(kemOutput []byte) ([]byte, error) {
 	p, err := cs.params()
 	if err != nil {
 		return nil, err
+	}
+	if p.x448 {
+		priv, _, err := cs.DeriveKeyPair(ks.ExternalSecret)
+		if err != nil {
+			return nil, err
+		}
+		return p.receiveExport448(kemOutput, priv, externalInitLabel, cs.HashSize())
 	}
 	var secret []byte
 	err = withDIT(func() error {

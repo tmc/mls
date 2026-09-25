@@ -24,14 +24,16 @@ if msg.WireFormat == mls.WireFormatKeyPackage {
 ## License
 
 MIT. See [LICENSE](LICENSE). The test vectors in `testdata` come from
-the MLS working group and carry their own license.
+the MLS working group and carry their own license. The code ported
+from CIRCL in `internal/fp448` and `internal/ed448` is under CIRCL's
+BSD license, in each package's LICENSE file.
 
 ## State
 
-Complete for the five cipher suites the Go standard library can
-provide. The wire format covers every structure in RFC 9420, and above
-it the package implements the cipher suites (over the Go 1.27
-`crypto/hpke` package), the key schedule, the secret tree and its
+Complete for all seven cipher suites. The wire format covers every
+structure in RFC 9420, and above it the package implements the cipher
+suites (over the Go 1.27 `crypto/hpke` package, and for X448 an
+internal HPKE), the key schedule, the secret tree and its
 ratchets, transcript hashes, signatures and hash references, message
 framing and protection, the ratchet tree with its hashes and parent
 hashes, TreeKEM update paths, the group state machine, external joins,
@@ -45,20 +47,25 @@ next, commit, welcome, err := g.Commit([]*mls.Proposal{
 })
 ```
 
-Suites 4 and 6 need X448 and Ed448, which neither the standard library
-nor `x/crypto` provides, and report `ErrUnsupportedCipherSuite`. Suite
-3 uses ChaCha20-Poly1305 for message protection, which the standard
-library exposes only through HPKE, so that one algorithm comes from
-`golang.org/x/crypto/chacha20poly1305`; everything else is stdlib.
+All seven RFC 9420 suites are supported. Suites 4 and 6 need X448 and
+Ed448, which neither the standard library nor `x/crypto` provides; the
+field and scalar arithmetic in `internal/fp448` and `internal/ed448`
+is ported from [CIRCL], and `internal/x448`, `internal/ed448` and
+`internal/hpkex448` build X448, Ed448 and DHKEM(X448, HKDF-SHA512) on
+it. Suites 3 and 6 use ChaCha20-Poly1305 for message protection, which
+the standard library exposes only through HPKE, so that one algorithm
+comes from `golang.org/x/crypto/chacha20poly1305`; everything else is
+stdlib.
 
 In FIPS 140-3 mode (`GODEBUG=fips140=on`, or a `GOFIPS140` build such
 as the certified `v1.0.0` module), only suites 2, 5 and 7 (P-256,
-P-521, P-384) are supported; the X25519 suites 1 and 3 report
-`ErrUnsupportedCipherSuite`. `GODEBUG=fips140=only` is not supported:
-MLS derives its own AES-GCM nonces, which the Go module does not approve
-for encryption. See the package documentation.
+P-521, P-384) are supported; the X25519 suites 1 and 3 and the X448
+suites 4 and 6 report `ErrUnsupportedCipherSuite`.
+`GODEBUG=fips140=only` is not supported: MLS derives its own AES-GCM
+nonces, which the Go module does not approve for encryption. See the
+package documentation.
 
-Everything RFC 9420 defines is implemented for those suites.
+Everything RFC 9420 defines is implemented.
 
 The `multicred` subpackage implements the multi-credential and
 weak multi-credential types of draft-ietf-mls-extensions, registered
@@ -71,7 +78,7 @@ pass: `messages`, `deserialization`, `tree-math`, `crypto-basics`,
 `key-schedule`, `psk_secret`, `transcript-hashes`, `secret-tree`,
 `message-protection`, `tree-operations`, `tree-validation`, `welcome`,
 `treekem`, `passive-client-welcome`, `passive-client-random`, and
-`passive-client-handling-commit`. Cases on suites 4 and 6 are skipped.
+`passive-client-handling-commit`, on all seven cipher suites.
 The vector files are vendored in `testdata`; `go generate ./...`
 refreshes them.
 
@@ -114,3 +121,4 @@ Report a vulnerability by opening an issue.
 
 [RFC 9420]: https://www.rfc-editor.org/rfc/rfc9420.html
 [test vectors]: https://github.com/mlswg/mls-implementations
+[CIRCL]: https://github.com/cloudflare/circl

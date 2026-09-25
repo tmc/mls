@@ -36,7 +36,7 @@ func TestSecretTreeVectors(t *testing.T) {
 		cs := vec.CipherSuite
 		t.Run(cs.String(), func(t *testing.T) {
 			if !cs.Supported() {
-				t.Skipf("%s is not implementable with the Go standard library", cs)
+				t.Skipf("%s is not supported", cs)
 			}
 			d := vec.SenderData
 			key, nonce, err := cs.SenderDataKey(d.SenderDataSecret, d.Ciphertext)

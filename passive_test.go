@@ -49,7 +49,7 @@ func TestPassiveClientVectors(t *testing.T) {
 				t.Run(fmt.Sprintf("%d/%s", i, vec.CipherSuite), func(t *testing.T) {
 					cs := vec.CipherSuite
 					if !cs.Supported() {
-						t.Skipf("%s is not implementable with the Go standard library", cs)
+						t.Skipf("%s is not supported", cs)
 					}
 					if _, err := cs.AEAD(make([]byte, cs.AEADKeySize())); err != nil {
 						t.Skipf("%v", err)

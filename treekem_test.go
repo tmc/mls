@@ -58,7 +58,7 @@ func TestTreeKEMVectors(t *testing.T) {
 	for i, vec := range vectors {
 		t.Run(fmt.Sprintf("%d/%s", i, vec.CipherSuite), func(t *testing.T) {
 			if !vec.CipherSuite.Supported() {
-				t.Skipf("%s is not implementable with the Go standard library", vec.CipherSuite)
+				t.Skipf("%s is not supported", vec.CipherSuite)
 			}
 			testTreeKEM(t, &vec)
 		})

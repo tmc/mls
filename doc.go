@@ -59,11 +59,12 @@
 //	g, err := alice.NewGroup(groupID, nil)
 //	next, commit, welcome, err := g.Commit([]*mls.Proposal{add})
 //
-// Two of the seven cipher suites need X448 and Ed448, which the Go
-// standard library does not provide; they report
-// [ErrUnsupportedCipherSuite]. Decoding never authenticates: a
-// decoded structure is well formed, and the caller must still verify
-// its signatures.
+// All seven cipher suites of RFC 9420 are implemented. The Go standard
+// library provides neither X448 nor Ed448, so suites 4 and 6 use
+// internal implementations of them and of their HPKE.
+//
+// Decoding never authenticates: a decoded structure is well formed,
+// and the caller must still verify its signatures.
 //
 // Credential types outside RFC 9420 are registered by subpackages:
 // see [RegisterCredential] and [github.com/tmc/mls/multicred].
@@ -132,15 +133,15 @@
 // version GOFIPS140=v1.0.0, only [P256AES128GCMSHA256P256],
 // [P384AES256GCMSHA384P384], [P521AES256GCMSHA512P521] and the
 // post-quantum suites that use neither X25519 nor ChaCha20-Poly1305
-// are supported. The suites that use X25519 report
+// are supported. The suites that use X25519 or X448 report
 // [ErrUnsupportedCipherSuite], whether a client uses one or a received
-// message names one: X25519 is not an approved algorithm, and
-// ChaCha20-Poly1305 comes from golang.org/x/crypto, outside the
-// module. That includes the MLKEM768-X25519 suites, although the
-// module runs that hybrid as an approved ML-KEM service, since a
-// deployment that needs approved algorithms has the MLKEM768-P256 and
-// pure ML-KEM suites. The module v1.0.0 has no ML-DSA, so built with
-// GOFIPS140=v1.0.0 the ML-DSA suites report
+// message names one: X25519, X448 and Ed448 are not approved
+// algorithms, and ChaCha20-Poly1305 comes from golang.org/x/crypto,
+// outside the module. That includes the MLKEM768-X25519 suites,
+// although the module runs that hybrid as an approved ML-KEM service,
+// since a deployment that needs approved algorithms has the
+// MLKEM768-P256 and pure ML-KEM suites. The module v1.0.0 has no
+// ML-DSA, so built with GOFIPS140=v1.0.0 the ML-DSA suites report
 // [ErrUnsupportedCipherSuite] as well.
 //
 // GODEBUG=fips140=only is not supported. MLS derives each AES-GCM

@@ -53,7 +53,7 @@ func TestKeyScheduleVectors(t *testing.T) {
 		cs := vec.CipherSuite
 		t.Run(cs.String(), func(t *testing.T) {
 			if !cs.Supported() {
-				t.Skipf("%s is not implementable with the Go standard library", cs)
+				t.Skipf("%s is not supported", cs)
 			}
 			initSecret := []byte(vec.InitialInitSecret)
 			for i, e := range vec.Epochs {
@@ -137,7 +137,7 @@ func TestPSKSecretVectors(t *testing.T) {
 		cs := vec.CipherSuite
 		t.Run(cs.String(), func(t *testing.T) {
 			if !cs.Supported() {
-				t.Skipf("%s is not implementable with the Go standard library", cs)
+				t.Skipf("%s is not supported", cs)
 			}
 			ids := make([]PreSharedKeyID, len(vec.PSKs))
 			psks := make([][]byte, len(vec.PSKs))
@@ -177,7 +177,7 @@ func TestTranscriptHashVectors(t *testing.T) {
 		cs := vec.CipherSuite
 		t.Run(cs.String(), func(t *testing.T) {
 			if !cs.Supported() {
-				t.Skipf("%s is not implementable with the Go standard library", cs)
+				t.Skipf("%s is not supported", cs)
 			}
 			var c AuthenticatedContent
 			if err := Unmarshal(vec.AuthenticatedContent, &c); err != nil {
