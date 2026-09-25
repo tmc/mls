@@ -55,13 +55,13 @@ func send(t testing.TB, m *Message) *Message {
 }
 
 func TestGroup(t *testing.T) {
-	for _, cs := range []CipherSuite{
+	for _, cs := range append([]CipherSuite{
 		X25519AES128GCMSHA256Ed25519,
 		P256AES128GCMSHA256P256,
 		X25519ChaCha20Poly1305SHA256Ed25519,
 		P521AES256GCMSHA512P521,
 		P384AES256GCMSHA384P384,
-	} {
+	}, pqSuites...) {
 		t.Run(cs.String(), func(t *testing.T) { testGroup(t, cs) })
 	}
 }

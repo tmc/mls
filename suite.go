@@ -11,6 +11,7 @@ import (
 	"crypto/fips140"
 	"crypto/hkdf"
 	"crypto/hpke"
+	"crypto/mldsa"
 	"crypto/rand"
 	_ "crypto/sha256" // for crypto.SHA256.New
 	_ "crypto/sha512" // for crypto.SHA384.New and crypto.SHA512.New
@@ -35,6 +36,7 @@ type signatureScheme int
 const (
 	signatureEd25519 signatureScheme = iota
 	signatureECDSA
+	signatureMLDSA
 )
 
 // params are the cryptographic primitives of a cipher suite.
@@ -50,7 +52,9 @@ type params struct {
 	fips      bool // every primitive is approved in FIPS 140-3 mode
 	kemSize   int  // KEM private key size, Nsk
 	sig       signatureScheme
-	sigCurve  elliptic.Curve // sig == signatureECDSA
+	sigCurve  elliptic.Curve   // sig == signatureECDSA
+	mldsa     mldsa.Parameters // sig == signatureMLDSA
+	kem       func() hpke.KEM  // the KEM, if it is not DHKEM(curve)
 }
 
 // suiteParams[cs] is nil for cipher suites this package cannot
@@ -81,6 +85,64 @@ var suiteParams = map[CipherSuite]*params{
 		kdf: hpke.HKDFSHA384, aead: hpke.AES256GCM, keySize: 32, nonceSize: 12, kemSize: 48,
 		sig: signatureECDSA, sigCurve: elliptic.P384(), fips: true,
 	},
+
+	// The post-quantum suites of draft-ietf-mls-pq-ciphersuites-06.
+	// Their code points are provisional; see the package documentation.
+	MLKEM768X25519AES128GCMSHA256Ed25519: {
+		hash: crypto.SHA256, kem: hpke.MLKEM768X25519,
+		kdf: hpke.HKDFSHA256, aead: hpke.AES128GCM, keySize: 16, nonceSize: 12, kemSize: 32,
+		sig: signatureEd25519,
+	},
+	MLKEM768X25519AES256GCMSHA384Ed25519: {
+		hash: crypto.SHA384, kem: hpke.MLKEM768X25519,
+		kdf: hpke.HKDFSHA384, aead: hpke.AES256GCM, keySize: 32, nonceSize: 12, kemSize: 32,
+		sig: signatureEd25519,
+	},
+	MLKEM768P256AES128GCMSHA256P256: {
+		hash: crypto.SHA256, kem: hpke.MLKEM768P256,
+		kdf: hpke.HKDFSHA256, aead: hpke.AES128GCM, keySize: 16, nonceSize: 12, kemSize: 32,
+		sig: signatureECDSA, sigCurve: elliptic.P256(), fips: true,
+	},
+	MLKEM768P256AES256GCMSHA384P256: {
+		hash: crypto.SHA384, kem: hpke.MLKEM768P256,
+		kdf: hpke.HKDFSHA384, aead: hpke.AES256GCM, keySize: 32, nonceSize: 12, kemSize: 32,
+		sig: signatureECDSA, sigCurve: elliptic.P256(), fips: true,
+	},
+	MLKEM1024P384AES256GCMSHA384P384: {
+		hash: crypto.SHA384, kem: hpke.MLKEM1024P384,
+		kdf: hpke.HKDFSHA384, aead: hpke.AES256GCM, keySize: 32, nonceSize: 12, kemSize: 32,
+		sig: signatureECDSA, sigCurve: elliptic.P384(), fips: true,
+	},
+	MLKEM768AES256GCMSHA384Ed25519: {
+		hash: crypto.SHA384, kem: hpke.MLKEM768,
+		kdf: hpke.HKDFSHA384, aead: hpke.AES256GCM, keySize: 32, nonceSize: 12, kemSize: 64,
+		sig: signatureEd25519, fips: true,
+	},
+	MLKEM768AES256GCMSHA384P256: {
+		hash: crypto.SHA384, kem: hpke.MLKEM768,
+		kdf: hpke.HKDFSHA384, aead: hpke.AES256GCM, keySize: 32, nonceSize: 12, kemSize: 64,
+		sig: signatureECDSA, sigCurve: elliptic.P256(), fips: true,
+	},
+	MLKEM1024AES256GCMSHA384P384: {
+		hash: crypto.SHA384, kem: hpke.MLKEM1024,
+		kdf: hpke.HKDFSHA384, aead: hpke.AES256GCM, keySize: 32, nonceSize: 12, kemSize: 64,
+		sig: signatureECDSA, sigCurve: elliptic.P384(), fips: true,
+	},
+	MLKEM768X25519ChaCha20Poly1305SHA384MLDSA44: {
+		hash: crypto.SHA384, kem: hpke.MLKEM768X25519,
+		kdf: hpke.HKDFSHA384, aead: hpke.ChaCha20Poly1305, keySize: 32, nonceSize: 12, chacha: true, kemSize: 32,
+		sig: signatureMLDSA, mldsa: mldsa.MLDSA44(),
+	},
+	MLKEM768AES256GCMSHA384MLDSA65: {
+		hash: crypto.SHA384, kem: hpke.MLKEM768,
+		kdf: hpke.HKDFSHA384, aead: hpke.AES256GCM, keySize: 32, nonceSize: 12, kemSize: 64,
+		sig: signatureMLDSA, mldsa: mldsa.MLDSA65(), fips: true,
+	},
+	MLKEM1024AES256GCMSHA384MLDSA87: {
+		hash: crypto.SHA384, kem: hpke.MLKEM1024,
+		kdf: hpke.HKDFSHA384, aead: hpke.AES256GCM, keySize: 32, nonceSize: 12, kemSize: 64,
+		sig: signatureMLDSA, mldsa: mldsa.MLDSA87(), fips: true,
+	},
 }
 
 func (cs CipherSuite) params() (*params, error) {
@@ -91,11 +153,37 @@ func (cs CipherSuite) params() (*params, error) {
 	if fips140.Enabled() && !p.fips {
 		return nil, fmt.Errorf("%w %v: not approved in FIPS 140-3 mode", ErrUnsupportedCipherSuite, cs)
 	}
+	if p.sig == signatureMLDSA && fips140.Version() == "v1.0.0" {
+		return nil, fmt.Errorf("%w %v: ML-DSA is not in FIPS 140-3 module v1.0.0", ErrUnsupportedCipherSuite, cs)
+	}
 	return p, nil
 }
 
+// hpkeKEM returns the cipher suite's HPKE KEM.
+func (p *params) hpkeKEM() hpke.KEM {
+	if p.kem != nil {
+		return p.kem()
+	}
+	return hpke.DHKEM(p.curve)
+}
+
+// ecdsaHash returns the hash of the TLS signature scheme for ECDSA on
+// c, such as ecdsa_secp256r1_sha256. It is the suite's hash in the
+// suites of RFC 9420, but not in all of draft-ietf-mls-pq-ciphersuites,
+// which pairs P-256 signatures with SHA-384.
+func ecdsaHash(c elliptic.Curve) crypto.Hash {
+	switch c {
+	case elliptic.P256():
+		return crypto.SHA256
+	case elliptic.P384():
+		return crypto.SHA384
+	}
+	return crypto.SHA512
+}
+
 // Supported reports whether this package implements cs. In FIPS 140-3
-// mode it reports false for the suites that use X25519.
+// mode it reports false for the suites that use X25519, and built
+// with GOFIPS140=v1.0.0 for the suites that use ML-DSA.
 func (cs CipherSuite) Supported() bool {
 	_, err := cs.params()
 	return err == nil
@@ -215,8 +303,21 @@ func (cs CipherSuite) SignWithLabel(priv []byte, label string, content []byte) (
 			return nil
 		})
 		return sig, nil
+	case signatureMLDSA:
+		var sig []byte
+		err := withDIT(func() error {
+			key, err := mldsa.NewPrivateKey(p.mldsa, priv)
+			if err != nil {
+				return err
+			}
+			// Pure ML-DSA with an empty context, as
+			// draft-ietf-tls-mldsa-05 specifies.
+			sig, err = key.Sign(rand.Reader, msg, nil)
+			return err
+		})
+		return sig, err
 	default:
-		h := p.hash.New()
+		h := ecdsaHash(p.sigCurve).New()
 		h.Write(msg)
 		digest := h.Sum(nil)
 		var sig []byte
@@ -253,12 +354,20 @@ func (cs CipherSuite) VerifyWithLabel(pub SignaturePublicKey, label string, cont
 		if !ed25519.Verify(ed25519.PublicKey(pub), msg, sig) {
 			return ErrBadSignature
 		}
+	case signatureMLDSA:
+		key, err := mldsa.NewPublicKey(p.mldsa, pub)
+		if err != nil {
+			return err
+		}
+		if mldsa.Verify(key, msg, sig, nil) != nil {
+			return ErrBadSignature
+		}
 	default:
 		key, err := ecdsa.ParseUncompressedPublicKey(p.sigCurve, pub)
 		if err != nil {
 			return err
 		}
-		h := p.hash.New()
+		h := ecdsaHash(p.sigCurve).New()
 		h.Write(msg)
 		if !ecdsa.VerifyASN1(key, h.Sum(nil), sig) {
 			return ErrBadSignature
@@ -287,7 +396,7 @@ func (cs CipherSuite) EncryptWithLabel(pub HPKEPublicKey, label string, context,
 	if err != nil {
 		return nil, err
 	}
-	key, err := hpke.DHKEM(p.curve).NewPublicKey(pub)
+	key, err := p.hpkeKEM().NewPublicKey(pub)
 	if err != nil {
 		return nil, err
 	}
@@ -320,7 +429,7 @@ func (cs CipherSuite) DecryptWithLabel(priv []byte, label string, context []byte
 	}
 	var pt []byte
 	err = withDIT(func() error {
-		key, err := hpke.DHKEM(p.curve).NewPrivateKey(pad(priv, p.kemSize))
+		key, err := p.hpkeKEM().NewPrivateKey(pad(priv, p.kemSize))
 		if err != nil {
 			return err
 		}
@@ -446,7 +555,7 @@ func (cs CipherSuite) DeriveKeyPair(ikm []byte) (priv []byte, pub HPKEPublicKey,
 		return nil, nil, err
 	}
 	err = withDIT(func() error {
-		key, err := hpke.DHKEM(p.curve).DeriveKeyPair(ikm)
+		key, err := p.hpkeKEM().DeriveKeyPair(ikm)
 		if err != nil {
 			return err
 		}
@@ -468,7 +577,7 @@ func (cs CipherSuite) GenerateKeyPair() (priv []byte, pub HPKEPublicKey, err err
 		return nil, nil, err
 	}
 	err = withDIT(func() error {
-		key, err := hpke.DHKEM(p.curve).GenerateKey()
+		key, err := p.hpkeKEM().GenerateKey()
 		if err != nil {
 			return err
 		}
@@ -498,6 +607,13 @@ func (cs CipherSuite) GenerateSignatureKeyPair() (priv []byte, pub SignaturePubl
 			}
 			priv, pub = edPriv.Seed(), SignaturePublicKey(edPub)
 			return nil
+		case signatureMLDSA:
+			key, err := mldsa.GenerateKey(p.mldsa)
+			if err != nil {
+				return err
+			}
+			priv, pub = key.Bytes(), key.PublicKey().Bytes()
+			return nil
 		default:
 			key, err := ecdsa.GenerateKey(p.sigCurve, rand.Reader)
 			if err != nil {
@@ -525,7 +641,7 @@ func (cs CipherSuite) PublicKey(priv []byte) (HPKEPublicKey, error) {
 	}
 	var pub HPKEPublicKey
 	err = withDIT(func() error {
-		key, err := hpke.DHKEM(p.curve).NewPrivateKey(pad(priv, p.kemSize))
+		key, err := p.hpkeKEM().NewPrivateKey(pad(priv, p.kemSize))
 		if err != nil {
 			return err
 		}
@@ -547,7 +663,7 @@ func (cs CipherSuite) ExternalInit(externalPub HPKEPublicKey) (kemOutput, initSe
 	if err != nil {
 		return nil, nil, err
 	}
-	key, err := hpke.DHKEM(p.curve).NewPublicKey(externalPub)
+	key, err := p.hpkeKEM().NewPublicKey(externalPub)
 	if err != nil {
 		return nil, nil, err
 	}

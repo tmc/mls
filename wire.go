@@ -30,9 +30,47 @@ const (
 	P384AES256GCMSHA384P384             CipherSuite = 7
 )
 
-// String returns the name RFC 9420 gives the cipher suite, or its
-// number if it is not one this package knows.
+// Post-quantum cipher suites, from draft-ietf-mls-pq-ciphersuites-06.
+// The draft leaves the code points to IANA, which has not yet assigned
+// them; these are provisional and will change. See the package
+// documentation.
+const (
+	MLKEM768X25519AES128GCMSHA256Ed25519        CipherSuite = 0x004F // TBD1
+	MLKEM768X25519AES256GCMSHA384Ed25519        CipherSuite = 0x004E // TBD2
+	MLKEM768P256AES128GCMSHA256P256             CipherSuite = 0xF003 // TBD3
+	MLKEM768P256AES256GCMSHA384P256             CipherSuite = 0xF004 // TBD4
+	MLKEM1024P384AES256GCMSHA384P384            CipherSuite = 0xF005 // TBD5
+	MLKEM768AES256GCMSHA384Ed25519              CipherSuite = 0xF042 // TBD6
+	MLKEM768AES256GCMSHA384P256                 CipherSuite = 0x0050 // TBD7
+	MLKEM1024AES256GCMSHA384P384                CipherSuite = 0x0042 // TBD8
+	MLKEM768X25519ChaCha20Poly1305SHA384MLDSA44 CipherSuite = 0x0052 // TBD9
+	MLKEM768AES256GCMSHA384MLDSA65              CipherSuite = 0x0051 // TBD10
+	MLKEM1024AES256GCMSHA384MLDSA87             CipherSuite = 0x0907 // TBD11
+)
+
+// pqSuiteNames are the names draft-ietf-mls-pq-ciphersuites-06 gives
+// its cipher suites.
+var pqSuiteNames = map[CipherSuite]string{
+	MLKEM768X25519AES128GCMSHA256Ed25519:        "MLS_128_MLKEM768X25519_AES128GCM_SHA256_Ed25519",
+	MLKEM768X25519AES256GCMSHA384Ed25519:        "MLS_128_MLKEM768X25519_AES256GCM_SHA384_Ed25519",
+	MLKEM768P256AES128GCMSHA256P256:             "MLS_128_MLKEM768P256_AES128GCM_SHA256_P256",
+	MLKEM768P256AES256GCMSHA384P256:             "MLS_128_MLKEM768P256_AES256GCM_SHA384_P256",
+	MLKEM1024P384AES256GCMSHA384P384:            "MLS_192_MLKEM1024P384_AES256GCM_SHA384_P384",
+	MLKEM768AES256GCMSHA384Ed25519:              "MLS_128_MLKEM768_AES256GCM_SHA384_Ed25519",
+	MLKEM768AES256GCMSHA384P256:                 "MLS_128_MLKEM768_AES256GCM_SHA384_P256",
+	MLKEM1024AES256GCMSHA384P384:                "MLS_192_MLKEM1024_AES256GCM_SHA384_P384",
+	MLKEM768X25519ChaCha20Poly1305SHA384MLDSA44: "MLS_128_MLKEM768X25519_CHACHA20POLY1305_SHA384_MLDSA44",
+	MLKEM768AES256GCMSHA384MLDSA65:              "MLS_192_MLKEM768_AES256GCM_SHA384_MLDSA65",
+	MLKEM1024AES256GCMSHA384MLDSA87:             "MLS_256_MLKEM1024_AES256GCM_SHA384_MLDSA87",
+}
+
+// String returns the name RFC 9420 or draft-ietf-mls-pq-ciphersuites
+// gives the cipher suite, or its number if it is not one this package
+// knows.
 func (cs CipherSuite) String() string {
+	if name, ok := pqSuiteNames[cs]; ok {
+		return name
+	}
 	return enumString("CipherSuite", uint64(cs), []string{
 		"reserved",
 		"MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519",

@@ -4,7 +4,12 @@ package mls
 
 import (
 	"bytes"
+	"crypto"
+	"crypto/ecdsa"
+	"crypto/ed25519"
 	"crypto/fips140"
+	"crypto/hpke"
+	"crypto/mldsa"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -201,6 +206,9 @@ func TestFIPS140Mode(t *testing.T) {
 	for _, cs := range []CipherSuite{
 		X25519AES128GCMSHA256Ed25519,
 		X25519ChaCha20Poly1305SHA256Ed25519,
+		MLKEM768X25519AES128GCMSHA256Ed25519,
+		MLKEM768X25519AES256GCMSHA384Ed25519,
+		MLKEM768X25519ChaCha20Poly1305SHA384MLDSA44,
 	} {
 		if cs.Supported() {
 			t.Errorf("%v: Supported = true in FIPS 140-3 mode", cs)
@@ -213,8 +221,22 @@ func TestFIPS140Mode(t *testing.T) {
 		P256AES128GCMSHA256P256,
 		P521AES256GCMSHA512P521,
 		P384AES256GCMSHA384P384,
+		MLKEM768P256AES128GCMSHA256P256,
+		MLKEM768P256AES256GCMSHA384P256,
+		MLKEM1024P384AES256GCMSHA384P384,
+		MLKEM768AES256GCMSHA384Ed25519,
+		MLKEM768AES256GCMSHA384P256,
+		MLKEM1024AES256GCMSHA384P384,
+		MLKEM768AES256GCMSHA384MLDSA65,
+		MLKEM1024AES256GCMSHA384MLDSA87,
 	} {
 		t.Run(cs.String(), func(t *testing.T) {
+			if suiteParams[cs].sig == signatureMLDSA && fips140.Version() == "v1.0.0" {
+				if cs.Supported() {
+					t.Error("Supported = true with module v1.0.0, which has no ML-DSA")
+				}
+				return
+			}
 			if !cs.Supported() {
 				t.Fatal("Supported = false in FIPS 140-3 mode")
 			}
@@ -241,6 +263,180 @@ func TestFIPS140Mode(t *testing.T) {
 			add := &Proposal{Type: ProposalTypeAdd, Add: &Add{KeyPackage: *newTestClient(t, cs, "bob").KeyPackage}}
 			if _, _, _, err := g.Commit([]*Proposal{add}); !errors.Is(err, ErrUnsupportedCipherSuite) {
 				t.Errorf("Commit: %v, want %v", err, ErrUnsupportedCipherSuite)
+			}
+		})
+	}
+}
+
+// pqSuites are the cipher suites of draft-ietf-mls-pq-ciphersuites.
+var pqSuites = []CipherSuite{
+	MLKEM768X25519AES128GCMSHA256Ed25519,
+	MLKEM768X25519AES256GCMSHA384Ed25519,
+	MLKEM768P256AES128GCMSHA256P256,
+	MLKEM768P256AES256GCMSHA384P256,
+	MLKEM1024P384AES256GCMSHA384P384,
+	MLKEM768AES256GCMSHA384Ed25519,
+	MLKEM768AES256GCMSHA384P256,
+	MLKEM1024AES256GCMSHA384P384,
+	MLKEM768X25519ChaCha20Poly1305SHA384MLDSA44,
+	MLKEM768AES256GCMSHA384MLDSA65,
+	MLKEM1024AES256GCMSHA384MLDSA87,
+}
+
+// TestPQSuites checks the post-quantum cipher suites against their
+// definition in draft-ietf-mls-pq-ciphersuites-06, Table 2: the HPKE
+// KEM, KDF and AEAD identifiers, the hash, and the signature scheme.
+// The draft has no test vectors, so HPKE and signatures are checked
+// against the standard library primitives directly.
+func TestPQSuites(t *testing.T) {
+	tests := []struct {
+		cs             CipherSuite
+		kem, kdf, aead uint16
+		hash           crypto.Hash
+		sigPub         int         // signature public key size
+		sigHash        crypto.Hash // ECDSA only
+		mldsa          func() mldsa.Parameters
+	}{
+		{MLKEM768X25519AES128GCMSHA256Ed25519, 0x647a, 1, 1, crypto.SHA256, ed25519.PublicKeySize, 0, nil},
+		{MLKEM768X25519AES256GCMSHA384Ed25519, 0x647a, 2, 2, crypto.SHA384, ed25519.PublicKeySize, 0, nil},
+		{MLKEM768P256AES128GCMSHA256P256, 0x0050, 1, 1, crypto.SHA256, 65, crypto.SHA256, nil},
+		{MLKEM768P256AES256GCMSHA384P256, 0x0050, 2, 2, crypto.SHA384, 65, crypto.SHA256, nil},
+		{MLKEM1024P384AES256GCMSHA384P384, 0x0051, 2, 2, crypto.SHA384, 97, crypto.SHA384, nil},
+		{MLKEM768AES256GCMSHA384Ed25519, 0x0041, 2, 2, crypto.SHA384, ed25519.PublicKeySize, 0, nil},
+		{MLKEM768AES256GCMSHA384P256, 0x0041, 2, 2, crypto.SHA384, 65, crypto.SHA256, nil},
+		{MLKEM1024AES256GCMSHA384P384, 0x0042, 2, 2, crypto.SHA384, 97, crypto.SHA384, nil},
+		{MLKEM768X25519ChaCha20Poly1305SHA384MLDSA44, 0x647a, 2, 3, crypto.SHA384, mldsa.MLDSA44PublicKeySize, 0, mldsa.MLDSA44},
+		{MLKEM768AES256GCMSHA384MLDSA65, 0x0041, 2, 2, crypto.SHA384, mldsa.MLDSA65PublicKeySize, 0, mldsa.MLDSA65},
+		{MLKEM1024AES256GCMSHA384MLDSA87, 0x0042, 2, 2, crypto.SHA384, mldsa.MLDSA87PublicKeySize, 0, mldsa.MLDSA87},
+	}
+	if len(tests) != len(pqSuites) {
+		t.Fatalf("%d tests for %d suites", len(tests), len(pqSuites))
+	}
+	for _, tt := range tests {
+		t.Run(tt.cs.String(), func(t *testing.T) {
+			if strings.HasPrefix(tt.cs.String(), "CipherSuite(") {
+				t.Errorf("no name for suite %#04x", uint16(tt.cs))
+			}
+			skipUnapproved(t, tt.cs)
+			if got := tt.cs.HashSize(); got != tt.hash.Size() {
+				t.Errorf("HashSize = %d, want %d", got, tt.hash.Size())
+			}
+			p, err := tt.cs.params()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := p.hpkeKEM().ID(); got != tt.kem {
+				t.Errorf("KEM = %#04x, want %#04x", got, tt.kem)
+			}
+			kdf, aead := p.kdf(), p.aead()
+			if kdf.ID() != tt.kdf {
+				t.Errorf("KDF = %#04x, want %#04x", kdf.ID(), tt.kdf)
+			}
+			if aead.ID() != tt.aead {
+				t.Errorf("AEAD = %#04x, want %#04x", aead.ID(), tt.aead)
+			}
+			if p.chacha != (tt.aead == 3) {
+				t.Errorf("chacha = %v for AEAD %#04x", p.chacha, tt.aead)
+			}
+
+			// EncryptWithLabel is HPKE base mode with the
+			// EncryptContext of RFC 9420, Section 5.1.3, as info.
+			priv, pub, err := tt.cs.GenerateKeyPair()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got, err := tt.cs.PublicKey(priv); err != nil || !bytes.Equal(got, pub) {
+				t.Errorf("PublicKey = %x, %v; want %x", got, err, pub)
+			}
+			ct, err := tt.cs.EncryptWithLabel(pub, "label", []byte("context"), []byte("plaintext"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			kem, err := hpke.NewKEM(tt.kem)
+			if err != nil {
+				t.Fatal(err)
+			}
+			key, err := kem.NewPrivateKey(priv)
+			if err != nil {
+				t.Fatal(err)
+			}
+			info, err := encryptContext("label", []byte("context"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			r, err := hpke.NewRecipient(ct.KEMOutput, key, kdf, aead, info)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got, err := r.Open(nil, ct.Ciphertext); err != nil || string(got) != "plaintext" {
+				t.Errorf("hpke Open = %q, %v", got, err)
+			}
+
+			// DeriveKeyPair is the KEM's own.
+			ikm := bytes.Repeat([]byte{1}, 32)
+			_, derived, err := tt.cs.DeriveKeyPair(ikm)
+			if err != nil {
+				t.Fatal(err)
+			}
+			want, err := kem.DeriveKeyPair(ikm)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Equal(derived, want.PublicKey().Bytes()) {
+				t.Error("DeriveKeyPair disagrees with the KEM")
+			}
+
+			// SignWithLabel signs SignContent under the suite's TLS
+			// signature scheme: pure ML-DSA with an empty context
+			// (draft-ietf-tls-mldsa-05, Section 3), or ECDSA with the
+			// curve's hash, which is not always the suite's.
+			sigPriv, sigPub, err := tt.cs.GenerateSignatureKeyPair()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(sigPub) != tt.sigPub {
+				t.Errorf("signature public key is %d bytes, want %d", len(sigPub), tt.sigPub)
+			}
+			sig, err := tt.cs.SignWithLabel(sigPriv, "label", []byte("content"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := tt.cs.VerifyWithLabel(sigPub, "label", []byte("content"), sig); err != nil {
+				t.Errorf("VerifyWithLabel: %v", err)
+			}
+			if err := tt.cs.VerifyWithLabel(sigPub, "other", []byte("content"), sig); !errors.Is(err, ErrBadSignature) {
+				t.Errorf("VerifyWithLabel under another label: %v, want %v", err, ErrBadSignature)
+			}
+			msg, err := signContent("label", []byte("content"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			switch {
+			case tt.mldsa != nil:
+				if len(sig) != tt.mldsa().SignatureSize() {
+					t.Errorf("signature is %d bytes, want %d", len(sig), tt.mldsa().SignatureSize())
+				}
+				pk, err := mldsa.NewPublicKey(tt.mldsa(), sigPub)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := mldsa.Verify(pk, msg, sig, nil); err != nil {
+					t.Errorf("mldsa.Verify: %v", err)
+				}
+			case tt.sigHash != 0:
+				pk, err := ecdsa.ParseUncompressedPublicKey(p.sigCurve, sigPub)
+				if err != nil {
+					t.Fatal(err)
+				}
+				h := tt.sigHash.New()
+				h.Write(msg)
+				if !ecdsa.VerifyASN1(pk, h.Sum(nil), sig) {
+					t.Errorf("signature does not verify over %v", tt.sigHash)
+				}
+			default:
+				if !ed25519.Verify(ed25519.PublicKey(sigPub), msg, sig) {
+					t.Error("ed25519.Verify failed")
+				}
 			}
 		})
 	}

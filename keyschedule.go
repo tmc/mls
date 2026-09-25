@@ -114,7 +114,7 @@ func (ks *keySchedule) ExternalPub() (HPKEPublicKey, error) {
 	}
 	var pub HPKEPublicKey
 	err = withDIT(func() error {
-		key, err := hpke.DHKEM(p.curve).DeriveKeyPair(ks.ExternalSecret)
+		key, err := p.hpkeKEM().DeriveKeyPair(ks.ExternalSecret)
 		if err != nil {
 			return err
 		}
@@ -203,7 +203,7 @@ func (ks *keySchedule) ExternalInit(kemOutput []byte) ([]byte, error) {
 	}
 	var secret []byte
 	err = withDIT(func() error {
-		key, err := hpke.DHKEM(p.curve).DeriveKeyPair(ks.ExternalSecret)
+		key, err := p.hpkeKEM().DeriveKeyPair(ks.ExternalSecret)
 		if err != nil {
 			return err
 		}

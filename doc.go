@@ -68,6 +68,32 @@
 // Credential types outside RFC 9420 are registered by subpackages:
 // see [RegisterCredential] and [github.com/tmc/mls/multicred].
 //
+// # Post-quantum cipher suites
+//
+// The package also implements the eleven cipher suites of
+// draft-ietf-mls-pq-ciphersuites-06, from
+// [MLKEM768X25519AES128GCMSHA256Ed25519] to
+// [MLKEM1024AES256GCMSHA384MLDSA87]. Their KEMs are the ML-KEM and
+// hybrid KEMs of [crypto/hpke] (draft-ietf-hpke-pq), and three of them
+// sign with ML-DSA from [crypto/mldsa]: pure ML-DSA with an empty
+// context string, as draft-ietf-tls-mldsa specifies for TLS, over the
+// same SignContent as every other suite (RFC 9420, Section 5.1.2).
+// ECDSA signs with the hash its TLS signature scheme names, so a
+// P-256 suite signs with SHA-256 even where the suite's hash is
+// SHA-384.
+//
+// The draft leaves the code points to IANA, which has not assigned
+// them. This package uses the provisional code points of OpenMLS,
+// which carries these suites behind its draft-ietf-mls-pq-ciphersuites
+// feature, so that the two can interoperate; OpenMLS has none for the
+// MLKEM768-P256 and MLKEM1024-P384 suites, which use 0xF003 to 0xF005
+// from the private-use range. Every one of these code points will
+// change when IANA assigns the real ones, and the suites themselves
+// may change with the draft.
+//
+// Key packages and commits in these suites are large: an ML-KEM-1024
+// public key is 1568 bytes and an ML-DSA-87 signature 4627 bytes.
+//
 // # Security
 //
 // This package has not been audited. Passing the working group's
@@ -104,11 +130,18 @@
 // In FIPS 140-3 mode (see [crypto/fips140]), set by GODEBUG=fips140=on
 // or by building with GOFIPS140, including the certified module
 // version GOFIPS140=v1.0.0, only [P256AES128GCMSHA256P256],
-// [P384AES256GCMSHA384P384] and [P521AES256GCMSHA512P521] are
-// supported. The two X25519 suites report [ErrUnsupportedCipherSuite],
-// whether a client uses one or a received message names one: X25519
-// is not an approved algorithm, and ChaCha20-Poly1305 comes from
-// golang.org/x/crypto, outside the module.
+// [P384AES256GCMSHA384P384], [P521AES256GCMSHA512P521] and the
+// post-quantum suites that use neither X25519 nor ChaCha20-Poly1305
+// are supported. The suites that use X25519 report
+// [ErrUnsupportedCipherSuite], whether a client uses one or a received
+// message names one: X25519 is not an approved algorithm, and
+// ChaCha20-Poly1305 comes from golang.org/x/crypto, outside the
+// module. That includes the MLKEM768-X25519 suites, although the
+// module runs that hybrid as an approved ML-KEM service, since a
+// deployment that needs approved algorithms has the MLKEM768-P256 and
+// pure ML-KEM suites. The module v1.0.0 has no ML-DSA, so built with
+// GOFIPS140=v1.0.0 the ML-DSA suites report
+// [ErrUnsupportedCipherSuite] as well.
 //
 // GODEBUG=fips140=only is not supported. MLS derives each AES-GCM
 // nonce itself, from the secret tree and the reuse guard (RFC 9420,
