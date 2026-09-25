@@ -195,9 +195,10 @@ No openmls bugs turned up.
 
 Suites 4 (MLS_256_DHKEMX448_AES256GCM_SHA512_Ed448) and 6
 (MLS_256_DHKEMX448_CHACHA20POLY1305_SHA512_Ed448) are not in openmls's
-interop client, so only tmc ↔ tmc covers them. Results from
-2026-09-25, with `-suite 4` and `-suite 6`: each cell counts both
-suites in both handshake modes.
+interop client; mlspp's is, and "Results with mlspp" below covers
+them against tmc/mls. tmc ↔ tmc results from 2026-09-25, with
+`-suite 4` and `-suite 6`: each cell counts both suites in both
+handshake modes.
 
 | config | script | tmc ↔ tmc |
 |---|---|---|
@@ -301,60 +302,77 @@ implementation (hpke-rs, libcrux and RustCrypto's ml-dsa).
 
 Passed runs out of total, from 2026-09-25, with both runner fixes and
 `-client` tmc/mls first. mlspp supports suites 1–10; the two share
-1, 2, 3, 5 and 7, so "tmc ↔ mlspp" covers those five suites and
-"mlspp ↔ mlspp" covers all ten. tmc ↔ tmc was 10/10 for every script,
-as above. openmls cannot run reinit, so these are the first
-cross-implementation runs of `Group.Reinitialize` and of reinit
-proposals from an external sender.
+1–7, so "tmc ↔ mlspp" covers those seven suites and "mlspp ↔ mlspp"
+covers all ten. Suites 4 and 6 were run later, with `-suite 4` and
+`-suite 6`, and are added into the counts; mlspp is the only
+independent implementation here that runs X448 and Ed448. tmc ↔ tmc
+was 10/10 for every script, as above. openmls cannot run reinit, so
+these are the first cross-implementation runs of `Group.Reinitialize`
+and of reinit proposals from an external sender.
 
 | config | script | tmc ↔ mlspp | mlspp ↔ mlspp |
 |---|---|---|---|
-| welcome_join | no_path_secret | 20/20 | 20/20 |
-| welcome_join | with_external_tree | 20/20 | 20/20 |
-| welcome_join | with_path_secret | 20/20 | 20/20 |
-| welcome_join | with_psk | 20/20 | 20/20 |
-| application | in_order | 20/20 | 20/20 |
-| application | out_of_order_across_epochs | 20/20 | 20/20 |
-| application | out_of_order_within_epoch | 20/20 | 20/20 |
-| commit | add | 2540/2540 | 20/20 |
-| commit | all_together_alice_proposes | 620/620 | 20/20 |
-| commit | all_together_bob_proposes | 620/620 | 20/20 |
-| commit | empty | 20/20 | 20/20 |
-| commit | external_psk | 20/20 | 20/20 |
-| commit | group_context_extensions | 20/20 | 20/20 |
-| commit | remove | 300/300 | 20/20 |
-| commit | resumption_psk | 20/20 | 20/20 |
-| commit | update | 20/20 | 20/20 |
-| external_join | normal | 20/20 | 20/20 |
-| external_join | removing_prior | 20/20 | 20/20 |
-| external_join | with_external_tree | 20/20 | 20/20 |
-| external_join | with_more_members | 300/300 | 20/20 |
-| external_join | with_psk | 20/20 | 20/20 |
-| external_proposals | external_add | 140/140 | 20/20 |
-| external_proposals | external_psk | 140/140 | 20/20 |
-| external_proposals | external_reinit | 140/140 | 20/20 |
-| external_proposals | external_remove | 140/140 | 20/20 |
-| external_proposals | group_context_extensions | 140/140 | 20/20 |
-| external_proposals | joiner_signed_add | 20/20 | 20/20 |
-| external_proposals | multiple_external | 300/300 | 20/20 |
-| external_proposals | resumption_psk | 140/140 | 20/20 |
-| reinit | all_same_actor | 300/300 | 20/20 |
-| reinit | change_ciphersuite | 300/300 | 20/20 |
-| reinit | change_extensions | 300/300 | 20/20 |
-| reinit | change_group_id | 300/300 | 20/20 |
-| reinit | external_tree | 300/300 | 20/20 |
-| reinit | force_path | 300/300 | 20/20 |
-| branch | base | 300/300 | 20/20 |
-| branch | external_tree | 300/300 | 20/20 |
-| branch | force_path | 300/300 | 20/20 |
-| branch | with_extensions | 300/300 | 20/20 |
+| welcome_join | no_path_secret | 28/28 | 20/20 |
+| welcome_join | with_external_tree | 28/28 | 20/20 |
+| welcome_join | with_path_secret | 28/28 | 20/20 |
+| welcome_join | with_psk | 28/28 | 20/20 |
+| application | in_order | 28/28 | 20/20 |
+| application | out_of_order_across_epochs | 28/28 | 20/20 |
+| application | out_of_order_within_epoch | 28/28 | 20/20 |
+| commit | add | 3556/3556 | 20/20 |
+| commit | all_together_alice_proposes | 868/868 | 20/20 |
+| commit | all_together_bob_proposes | 868/868 | 20/20 |
+| commit | empty | 28/28 | 20/20 |
+| commit | external_psk | 28/28 | 20/20 |
+| commit | group_context_extensions | 28/28 | 20/20 |
+| commit | remove | 420/420 | 20/20 |
+| commit | resumption_psk | 28/28 | 20/20 |
+| commit | update | 28/28 | 20/20 |
+| external_join | normal | 28/28 | 20/20 |
+| external_join | removing_prior | 28/28 | 20/20 |
+| external_join | with_external_tree | 28/28 | 20/20 |
+| external_join | with_more_members | 420/420 | 20/20 |
+| external_join | with_psk | 28/28 | 20/20 |
+| external_proposals | external_add | 196/196 | 20/20 |
+| external_proposals | external_psk | 196/196 | 20/20 |
+| external_proposals | external_reinit | 196/196 | 20/20 |
+| external_proposals | external_remove | 196/196 | 20/20 |
+| external_proposals | group_context_extensions | 196/196 | 20/20 |
+| external_proposals | joiner_signed_add | 28/28 | 20/20 |
+| external_proposals | multiple_external | 420/420 | 20/20 |
+| external_proposals | resumption_psk | 196/196 | 20/20 |
+| reinit | all_same_actor | 420/420 | 20/20 |
+| reinit | change_ciphersuite | 420/420 | 20/20 |
+| reinit | change_extensions | 420/420 | 20/20 |
+| reinit | change_group_id | 420/420 | 20/20 |
+| reinit | external_tree | 420/420 | 20/20 |
+| reinit | force_path | 420/420 | 20/20 |
+| branch | base | 420/420 | 20/20 |
+| branch | external_tree | 420/420 | 20/20 |
+| branch | force_path | 420/420 | 20/20 |
+| branch | with_extensions | 420/420 | 20/20 |
 
 deep_random was run three times with `-random` for each shared suite
-(`-suite 1`, 2, 3, 5, 7): 30/30 runs passed, each mixing both clients.
-Without `-suite`, `-random` also plays the ten suites only mlspp
-supports, which is slow and tests neither tmc/mls nor interop.
+(`-suite 1` through `-suite 7`): 41/42 runs passed, each mixing both
+clients. Without `-suite`, `-random` also plays the suites only one
+client supports, which is slow and tests neither tmc/mls nor interop.
+The PQ suites do not overlap: mlspp's are 0x8–0xa (ML-KEM hybrids),
+tmc/mls's provisional ones are 0x42, 0x4e–0x52, 0x907, 0xf003–0xf005
+and 0xf042, so none of them was run against mlspp.
 
-No tmc/mls or mlspp bugs turned up.
+The one failure (suite 6, "handle proposal: chacha20poly1305: message
+authentication failed" at a tmc/mls committer) was in mlspp's interop
+client, not in either library. `MLSClientImpl::store_state` names a
+state by the first four bytes of its epoch authenticator plus its leaf
+index, and stores it with `emplace`, which keeps an existing entry.
+On a server that had run the other configs, one of mlspp's new state
+IDs matched a state left from the earlier suite 6 reinit run, so that
+member's UpdateProposal came from the old group (a group ID seen
+nowhere else in the run) and tmc/mls could not open it. A fourth
+suite 6 invocation against freshly started servers passed 2/2.
+Restart `mlspp_client` between long runs.
+
+No tmc/mls or mlspp library bugs turned up.
 
 With all three clients (`-client` tmc/mls, mlspp, openmls), every
 assignment that mixes all three passed for welcome_join, application,
