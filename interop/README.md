@@ -18,6 +18,7 @@ a `replace` directive.
 |---|---|
 | mls-implementations (harness, `mls_client.proto`) | cfd450286d1b (2026-04-22) |
 | openmls `interop_client` | ce54fc100ab2 (2026-09-16) |
+| mlspp `mlspp_client` | b806b80f4e93 (2026-09-17) |
 | tmc/mls | this tree |
 
 The gRPC bindings in `internal/mlsclient` are generated from a copy of
@@ -49,6 +50,17 @@ skip others. The results below were produced with this one-line fix:
 	-			out = append(out, append(tuple, v))
 	+			out = append(out, append(append([]int(nil), tuple...), v))
 
+`ScriptMatrix` has a second bug: it indexes the pool by a client's
+position among the clients that support a suite, not by its position
+in the pool, so a suite that only a later `-client` supports is played
+by the first one. It does not affect runs where the first client
+supports every suite (tmc/mls and openmls), but it does with mlspp,
+which supports suites tmc/mls does not. The mlspp results below also
+have this fix:
+
+	-					config.ActorClients[actors[i]] = p.clients[combo[i]]
+	+					config.ActorClients[actors[i]] = p.clients[clients[combo[i]]]
+
 openmls:
 
 	cd openmls && cargo build --release -j 4 -p interop_client
@@ -63,10 +75,31 @@ requested suite to the `Capabilities` of the key packages it builds
 (in `create_key_package` and the external join), which otherwise list
 suites 1–3 and make openmls refuse its own key package.
 
+mlspp (`cmd/interop` in cisco/mlspp), on macOS with Homebrew's gRPC
+instead of the vcpkg toolchain that its Makefile assumes:
+
+	brew install grpc nlohmann-json               # also protobuf, abseil, openssl@3, gflags, icu4c
+	B=$(brew --prefix)
+	cmake -S mlspp -B lib-build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+	    -DCMAKE_INSTALL_PREFIX=$PWD/prefix \
+	    -DOPENSSL_ROOT_DIR=$B/opt/openssl@3 -DCMAKE_PREFIX_PATH=$B
+	cmake --build lib-build -j 4 && cmake --install lib-build
+	cmake -S mlspp/cmd/interop -B client-build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+	    -DOPENSSL_ROOT_DIR=$B/opt/openssl@3 -DICU_ROOT=$B/opt/icu4c@78 \
+	    -DCMAKE_PREFIX_PATH="$PWD/prefix;$B"
+	cmake --build client-build -j 4               # client-build/mlspp_client
+
+Two edits to a copy of `cmd/interop/CMakeLists.txt` are needed:
+`find_package(Protobuf CONFIG REQUIRED)`, since the module-mode lookup
+clashes with the targets gRPC's config defines; and `PROTO_PATH` set to
+the harness checkout's `interop/proto`, replacing the ExternalProject
+that clones mls-implementations at `origin/main` on every build.
+
 ## Running
 
 	./tmc-interop -port 50061 &
 	interop_client -p 50051 &                     # openmls
+	mlspp_client -live 50052 &                    # mlspp
 	test-runner -config configs/commit.json \
 	    -client localhost:50061 -client localhost:50051
 
@@ -76,7 +109,9 @@ both public and encrypted. That covers tmc/mls and openmls in each
 role, and each against itself. With `-client localhost:50061` alone it
 runs tmc/mls against itself over every suite tmc/mls supports.
 `SupportedCiphersuites` scans every code point, since the provisional
-post-quantum ones lie across the whole range.
+post-quantum ones lie across the whole range. A suite only one client
+supports is played by that client alone. Add
+`-client localhost:50052` to bring in mlspp.
 
 ## Results
 
@@ -261,6 +296,88 @@ All of these pass, including ML-DSA signatures and the
 MLKEM768-X25519 (X-Wing) KEM in both directions, which checks the
 KEMs, DeriveKeyPair and the signature encoding against an independent
 implementation (hpke-rs, libcrux and RustCrypto's ml-dsa).
+
+## Results with mlspp
+
+Passed runs out of total, from 2026-09-25, with both runner fixes and
+`-client` tmc/mls first. mlspp supports suites 1–10; the two share
+1, 2, 3, 5 and 7, so "tmc ↔ mlspp" covers those five suites and
+"mlspp ↔ mlspp" covers all ten. tmc ↔ tmc was 10/10 for every script,
+as above. openmls cannot run reinit, so these are the first
+cross-implementation runs of `Group.Reinitialize` and of reinit
+proposals from an external sender.
+
+| config | script | tmc ↔ mlspp | mlspp ↔ mlspp |
+|---|---|---|---|
+| welcome_join | no_path_secret | 20/20 | 20/20 |
+| welcome_join | with_external_tree | 20/20 | 20/20 |
+| welcome_join | with_path_secret | 20/20 | 20/20 |
+| welcome_join | with_psk | 20/20 | 20/20 |
+| application | in_order | 20/20 | 20/20 |
+| application | out_of_order_across_epochs | 20/20 | 20/20 |
+| application | out_of_order_within_epoch | 20/20 | 20/20 |
+| commit | add | 2540/2540 | 20/20 |
+| commit | all_together_alice_proposes | 620/620 | 20/20 |
+| commit | all_together_bob_proposes | 620/620 | 20/20 |
+| commit | empty | 20/20 | 20/20 |
+| commit | external_psk | 20/20 | 20/20 |
+| commit | group_context_extensions | 20/20 | 20/20 |
+| commit | remove | 300/300 | 20/20 |
+| commit | resumption_psk | 20/20 | 20/20 |
+| commit | update | 20/20 | 20/20 |
+| external_join | normal | 20/20 | 20/20 |
+| external_join | removing_prior | 20/20 | 20/20 |
+| external_join | with_external_tree | 20/20 | 20/20 |
+| external_join | with_more_members | 300/300 | 20/20 |
+| external_join | with_psk | 20/20 | 20/20 |
+| external_proposals | external_add | 140/140 | 20/20 |
+| external_proposals | external_psk | 140/140 | 20/20 |
+| external_proposals | external_reinit | 140/140 | 20/20 |
+| external_proposals | external_remove | 140/140 | 20/20 |
+| external_proposals | group_context_extensions | 140/140 | 20/20 |
+| external_proposals | joiner_signed_add | 20/20 | 20/20 |
+| external_proposals | multiple_external | 300/300 | 20/20 |
+| external_proposals | resumption_psk | 140/140 | 20/20 |
+| reinit | all_same_actor | 300/300 | 20/20 |
+| reinit | change_ciphersuite | 300/300 | 20/20 |
+| reinit | change_extensions | 300/300 | 20/20 |
+| reinit | change_group_id | 300/300 | 20/20 |
+| reinit | external_tree | 300/300 | 20/20 |
+| reinit | force_path | 300/300 | 20/20 |
+| branch | base | 300/300 | 20/20 |
+| branch | external_tree | 300/300 | 20/20 |
+| branch | force_path | 300/300 | 20/20 |
+| branch | with_extensions | 300/300 | 20/20 |
+
+deep_random was run three times with `-random` for each shared suite
+(`-suite 1`, 2, 3, 5, 7): 30/30 runs passed, each mixing both clients.
+Without `-suite`, `-random` also plays the ten suites only mlspp
+supports, which is slow and tests neither tmc/mls nor interop.
+
+No tmc/mls or mlspp bugs turned up.
+
+With all three clients (`-client` tmc/mls, mlspp, openmls), every
+assignment that mixes all three passed for welcome_join, application,
+external_join, branch, and external_proposals except as below; commit
+and reinit were not run three-way (commit/add alone would be about
+40,000 runs, and openmls has no reinit). Two things failed:
+
+- external_proposals/external_reinit: Unimplemented in openmls.
+- external_proposals/external_add (164/216 three-way, 54/84
+  openmls ↔ mlspp), joiner_signed_add (8/12 openmls ↔ mlspp), and all
+  three-way deep_random runs: openmls rejects mlspp's KeyPackages
+  with "A key package extension is not supported in the leaf's
+  capabilities". mlspp GREASEs `KeyPackage.extensions` without always
+  listing the GREASE types in `LeafNode.capabilities.extensions`, and
+  openmls requires that it does (`KeyPackageIn::validate`,
+  openmls/src/key_packages/key_package_in.rs). RFC 9420, Section 13.5
+  lists `KeyPackage.extensions` as a GREASE field and requires only
+  GREASE values in `LeafNode.extensions` to appear in the
+  capabilities; Section 7.3 checks only the LeafNode's own
+  extensions. openmls is at fault. The failures follow mlspp's random
+  GREASE draw; in external_proposals every one has an openmls member
+  handling an Add of an mlspp KeyPackage. tmc/mls accepts these
+  KeyPackages.
 
 ## Unimplemented
 
