@@ -119,14 +119,14 @@ func testGroup(t *testing.T, cs CipherSuite) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := a1.Handle(send(t, prop)); err != nil {
+	if _, _, err := a1.Handle(send(t, prop)); err != nil {
 		t.Fatal(err)
 	}
 	a2, commit, welcome, err := a1.Commit(nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	b2, err := b1.Handle(send(t, commit))
+	b2, _, err := b1.Handle(send(t, commit))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -147,11 +147,11 @@ func testGroup(t *testing.T, cs CipherSuite) {
 		t.Fatal(err)
 	}
 	commit = send(t, commit)
-	a3, err := a2.Handle(commit)
+	a3, _, err := a2.Handle(commit)
 	if err != nil {
 		t.Fatal(err)
 	}
-	b3, err := b2.Handle(commit)
+	b3, _, err := b2.Handle(commit)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -175,14 +175,14 @@ func testGroup(t *testing.T, cs CipherSuite) {
 		t.Fatal(err)
 	}
 	commit = send(t, commit)
-	c4, err := c3.Handle(commit)
+	c4, _, err := c3.Handle(commit)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !bytes.Equal(a4.EpochAuthenticator(), c4.EpochAuthenticator()) {
 		t.Fatal("alice and carol disagree after the remove")
 	}
-	if _, err := b3.Handle(commit); err != ErrRemoved {
+	if _, _, err := b3.Handle(commit); err != ErrRemoved {
 		t.Errorf("bob handling his own removal: %v, want %v", err, ErrRemoved)
 	}
 }
@@ -201,10 +201,10 @@ func TestRemovedAndReplaced(t *testing.T) {
 		t.Fatal(err)
 	}
 	commit = send(t, commit)
-	if _, err := c.Handle(commit); err != nil {
+	if _, _, err := c.Handle(commit); err != nil {
 		t.Fatalf("carol: %v", err)
 	}
-	if _, err := b.Handle(commit); err != ErrRemoved {
+	if _, _, err := b.Handle(commit); err != ErrRemoved {
 		t.Errorf("bob handling his own removal: %v, want %v", err, ErrRemoved)
 	}
 }

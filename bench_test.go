@@ -74,7 +74,7 @@ func BenchmarkHandle(b *testing.B) {
 			wire := send(b, commit)
 			b.ReportAllocs()
 			for b.Loop() {
-				if _, err := m.Handle(wire); err != nil {
+				if _, _, err := m.Handle(wire); err != nil {
 					b.Fatal(err)
 				}
 			}

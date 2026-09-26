@@ -233,14 +233,14 @@ func unmergedGroup(t *testing.T) *Group {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if eg, err = eg.Handle(send(t, msg)); err != nil {
+	if eg, _, err = eg.Handle(send(t, msg)); err != nil {
 		t.Fatal(err)
 	}
 	_, msg, _, err = eg.Commit(nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if g, err = g.Handle(send(t, msg)); err != nil {
+	if g, _, err = g.Handle(send(t, msg)); err != nil {
 		t.Fatal(err)
 	}
 	if g, _, _, err = g.Commit([]*Proposal{add(newTestClient(t, cs, "ivan"))}); err != nil {

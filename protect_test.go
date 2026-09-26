@@ -484,6 +484,30 @@ func TestPrivateHandshakeAfterApplication(t *testing.T) {
 	}
 }
 
+// Handle is the one entry point for everything a member receives, so
+// it must hand back an application message's plaintext: decrypting
+// the message spent the key, and the message cannot be read again.
+func TestHandleApplication(t *testing.T) {
+	a, b, _ := threeMember(t)
+	m, err := b.Protect(nil, []byte("hello"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	g, c, err := a.Handle(send(t, m))
+	if err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	if g != a {
+		t.Errorf("Handle returned a new group for an application message")
+	}
+	if got := string(c.Content.ApplicationData); got != "hello" {
+		t.Errorf("ApplicationData = %q, want %q", got, "hello")
+	}
+	if c.Content.Sender.LeafIndex != uint32(b.Index) {
+		t.Errorf("sender = %d, want %d", c.Content.Sender.LeafIndex, b.Index)
+	}
+}
+
 // A generation far ahead of the ratchet costs one derivation per
 // step, so it must be refused rather than walked.
 func TestSenderDataGenerationBound(t *testing.T) {
@@ -631,7 +655,7 @@ func TestPublicHandshake(t *testing.T) {
 			if p.WireFormat != tt.want {
 				t.Errorf("proposal wire format = %v, want %v", p.WireFormat, tt.want)
 			}
-			if ag, err = ag.Handle(send(t, p)); err != nil {
+			if ag, _, err = ag.Handle(send(t, p)); err != nil {
 				t.Fatalf("Handle(proposal): %v", err)
 			}
 			ag, c, w, err := ag.Commit(nil)
@@ -641,7 +665,7 @@ func TestPublicHandshake(t *testing.T) {
 			if c.WireFormat != tt.want {
 				t.Errorf("commit wire format = %v, want %v", c.WireFormat, tt.want)
 			}
-			if bg, err = bg.Handle(send(t, c)); err != nil {
+			if bg, _, err = bg.Handle(send(t, c)); err != nil {
 				t.Fatalf("Handle(commit): %v", err)
 			}
 			cg, err := carol.Join(send(t, w).Welcome, nil)

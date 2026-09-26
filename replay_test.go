@@ -220,7 +220,7 @@ func TestExternalProposalReplay(t *testing.T) {
 			f := newReplayFixture(t)
 			g := tt.target(t, f)
 			staged := len(g.proposals)
-			got, err := g.Handle(send(t, tt.msg(f)))
+			got, _, err := g.Handle(send(t, tt.msg(f)))
 			if !errors.Is(err, tt.want) {
 				t.Fatalf("Handle = %v, want %v", err, tt.want)
 			}
@@ -250,7 +250,7 @@ func TestExternalProposalReplay(t *testing.T) {
 // handle delivers m to g, which must accept it.
 func handle(t *testing.T, g *Group, m *Message) {
 	t.Helper()
-	if _, err := g.Handle(send(t, m)); err != nil {
+	if _, _, err := g.Handle(send(t, m)); err != nil {
 		t.Fatal(err)
 	}
 }

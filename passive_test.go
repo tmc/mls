@@ -128,7 +128,7 @@ func testPassiveClient(t *testing.T, vec *passiveVector) {
 			if err := Unmarshal(raw, m); err != nil {
 				t.Fatalf("epoch %d: proposal %d: %v", i, j, err)
 			}
-			if g, err = g.Handle(m); err != nil {
+			if g, _, err = g.Handle(m); err != nil {
 				t.Fatalf("epoch %d: proposal %d: %v", i, j, err)
 			}
 		}
@@ -136,7 +136,7 @@ func testPassiveClient(t *testing.T, vec *passiveVector) {
 		if err := Unmarshal(epoch.Commit, m); err != nil {
 			t.Fatalf("epoch %d: commit: %v", i, err)
 		}
-		if g, err = g.Handle(m); err != nil {
+		if g, _, err = g.Handle(m); err != nil {
 			t.Fatalf("epoch %d: commit: %v", i, err)
 		}
 		if !bytes.Equal(g.EpochAuthenticator(), epoch.EpochAuthenticator) {

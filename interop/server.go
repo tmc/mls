@@ -687,7 +687,7 @@ func (st *state) handleProposals(proposals [][]byte) error {
 		if err != nil {
 			return err
 		}
-		if _, err := st.group.Handle(m); err != nil {
+		if _, _, err := st.group.Handle(m); err != nil {
 			return fmt.Errorf("handle proposal: %w", err)
 		}
 	}
@@ -787,7 +787,7 @@ func (s *server) handleCommit(req *pb.HandleCommitRequest) (*state, error) {
 	if err != nil {
 		return nil, err
 	}
-	next, err := st.group.Handle(m)
+	next, _, err := st.group.Handle(m)
 	if err != nil {
 		return nil, fmt.Errorf("handle commit: %w", err)
 	}

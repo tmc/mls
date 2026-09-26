@@ -79,7 +79,7 @@ func TestEpochIsolation(t *testing.T) {
 		t.Fatal(err)
 	}
 	want = hash(t, eg)
-	if _, err := eg.Handle(send(t, commit)); err != nil {
+	if _, _, err := eg.Handle(send(t, commit)); err != nil {
 		t.Fatal(err)
 	}
 	if got := hash(t, eg); !bytes.Equal(got, want) {

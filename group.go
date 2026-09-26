@@ -439,26 +439,46 @@ func (g *Group) Protect(authenticatedData, plaintext []byte) (*Message, error) {
 // and every committer consider.
 const maxProposals = 1024
 
-// Handle processes a handshake message, and is how a member follows
-// the group. A proposal is remembered in g until a commit refers to
-// it, and Handle returns g itself; a commit ends the epoch, and
-// Handle returns the group's state in the next one, leaving g as it
-// was.
-func (g *Group) Handle(m *Message) (*Group, error) {
+// Handle processes a message sent to the group, and is how a member
+// follows it. It returns the message's authenticated content together
+// with the group's state after the message:
+//
+//   - an application message leaves the group as it was, and Handle
+//     returns g, with the plaintext in the content's ApplicationData;
+//   - a proposal is remembered in g until a commit refers to it, and
+//     Handle returns g;
+//   - a commit ends the epoch, and Handle returns the group's state in
+//     the next one, leaving g as it was.
+//
+// Since a private message's content type is encrypted, a caller
+// cannot tell these apart before Handle decrypts the message, and
+// decrypting consumes the sender's key for that generation: so
+// Handle, not the caller, dispatches on the type.
+//
+// On error Handle returns a nil group, and g remains usable. The keys
+// of a private message that decrypted are consumed even if its
+// content was then rejected.
+func (g *Group) Handle(m *Message) (*Group, *AuthenticatedContent, error) {
 	c, err := g.Unprotect(m)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	switch c.Content.ContentType {
+	case ContentTypeApplication:
+		return g, c, nil
 	case ContentTypeProposal:
 		if err := g.AddProposal(c); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		return g, nil
+		return g, c, nil
 	case ContentTypeCommit:
-		return g.ApplyCommit(c)
+		next, err := g.ApplyCommit(c)
+		if err != nil {
+			return nil, nil, err
+		}
+		return next, c, nil
 	}
-	return nil, ErrNotCommit
+	return nil, nil, ErrNotCommit
 }
 
 // AddProposal remembers a proposal so that a later commit can refer

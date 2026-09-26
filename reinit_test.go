@@ -50,7 +50,7 @@ func TestReinit(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, g := range []*Group{ga, gc} {
-		if _, err := g.Handle(send(t, msg)); err != nil {
+		if _, _, err := g.Handle(send(t, msg)); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -58,11 +58,11 @@ func TestReinit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	gb2, err := gb.Handle(send(t, commit))
+	gb2, _, err := gb.Handle(send(t, commit))
 	if err != nil {
 		t.Fatal(err)
 	}
-	gc2, err := gc.Handle(send(t, commit))
+	gc2, _, err := gc.Handle(send(t, commit))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -231,7 +231,7 @@ func TestReinitCipherSuite(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	gb2, err := gb.Handle(send(t, commit))
+	gb2, _, err := gb.Handle(send(t, commit))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -267,7 +267,7 @@ func TestResumeReinitEpoch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	gb2, err := gb.Handle(send(t, commit))
+	gb2, _, err := gb.Handle(send(t, commit))
 	if err != nil {
 		t.Fatal(err)
 	}

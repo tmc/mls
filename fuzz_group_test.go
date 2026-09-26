@@ -270,7 +270,7 @@ func FuzzProposalList(f *testing.F) {
 			if err := Unmarshal(b, &wire); err != nil {
 				t.Fatalf("Unmarshal(commit): %v", err)
 			}
-			_, err := cloneGroup(m).Handle(&wire)
+			_, _, err := cloneGroup(m).Handle(&wire)
 			if err != nil && !errors.Is(err, ErrRemoved) && !errors.Is(err, ErrUnknownPSK) {
 				t.Fatalf("alice committed %d proposals that leaf %d rejects: %v", len(extra), m.Index, err)
 			}
@@ -454,7 +454,7 @@ func FuzzUnprotect(f *testing.F) {
 
 		// Handle takes the message through Unprotect and on to
 		// whatever its content asks; neither may panic.
-		_, _ = cloneGroup(fx.alice).Handle(m)
+		_, _, _ = cloneGroup(fx.alice).Handle(m)
 
 		a := cloneGroup(fx.alice)
 		c, err := a.Unprotect(m)

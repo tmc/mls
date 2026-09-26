@@ -44,7 +44,7 @@ func TestStagedUpdateSupersedes(t *testing.T) {
 		t.Error("the commit applied the superseded update, not the later one")
 	}
 	// The proposer must still be able to follow it.
-	if _, err := b.Handle(send(t, msg)); err != nil {
+	if _, _, err := b.Handle(send(t, msg)); err != nil {
 		t.Errorf("the proposer cannot follow its own update: %v", err)
 	}
 }
@@ -140,7 +140,7 @@ func stage(t *testing.T, from *Group, p *Proposal, to ...*Group) {
 		t.Fatal(err)
 	}
 	for _, g := range to {
-		if _, err := g.Handle(send(t, m)); err != nil {
+		if _, _, err := g.Handle(send(t, m)); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -224,7 +224,7 @@ func TestStagedInvalidLeftOut(t *testing.T) {
 			if got := members(a2.Tree); got != tt.want {
 				t.Errorf("members = %d, want %d", got, tt.want)
 			}
-			if _, err := b.Handle(send(t, msg)); err != nil {
+			if _, _, err := b.Handle(send(t, msg)); err != nil {
 				t.Errorf("a member rejects the commit: %v", err)
 			}
 		})

@@ -67,7 +67,7 @@ func TestProposeUpdate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	gb2, err := gb.Handle(send(t, commit))
+	gb2, _, err := gb.Handle(send(t, commit))
 	if err != nil {
 		t.Fatalf("following one's own update: %v", err)
 	}
@@ -146,7 +146,7 @@ func TestProposeUpdateErrors(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := gb.Handle(send(t, commit)); !errors.Is(err, ErrBadTreeKEM) {
+		if _, _, err := gb.Handle(send(t, commit)); !errors.Is(err, ErrBadTreeKEM) {
 			t.Errorf("got %v, want %v", err, ErrBadTreeKEM)
 		}
 	})
@@ -179,7 +179,7 @@ func TestCommitDropsOwnUpdate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("committing with one's own update outstanding: %v", err)
 	}
-	ga2, err := ga.Handle(send(t, commit))
+	ga2, _, err := ga.Handle(send(t, commit))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -204,7 +204,7 @@ func TestUpdateKeyOfRemoved(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := a.Handle(send(t, m)); err != nil {
+	if _, _, err := a.Handle(send(t, m)); err != nil {
 		t.Fatal(err)
 	}
 	a2, commit, _, err := a.Commit([]*Proposal{{Type: ProposalTypeRemove, Remove: &Remove{Removed: uint32(c.Index)}}})
@@ -214,7 +214,7 @@ func TestUpdateKeyOfRemoved(t *testing.T) {
 	if !bytes.Equal(a2.Tree.Leaf(b.Index).EncryptionKey, leaf.EncryptionKey) {
 		t.Error("the commit left the update out")
 	}
-	if _, err := b.Handle(send(t, commit)); err != nil {
+	if _, _, err := b.Handle(send(t, commit)); err != nil {
 		t.Errorf("the proposer rejects the commit: %v", err)
 	}
 }

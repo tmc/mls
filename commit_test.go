@@ -143,7 +143,7 @@ func TestCommitWithoutPath(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			a1, b1, _ := threeMember(t)
-			if _, err := b1.Handle(send(t, pathlessCommit(t, a1, tt.ps))); err != ErrPathRequired {
+			if _, _, err := b1.Handle(send(t, pathlessCommit(t, a1, tt.ps))); err != ErrPathRequired {
 				t.Errorf("Handle = %v, want %v", err, ErrPathRequired)
 			}
 		})
@@ -156,7 +156,7 @@ func TestCommitWithoutPathAllowed(t *testing.T) {
 	a1, b1, _ := threeMember(t)
 	dave := newTestClient(t, a1.CipherSuite, "dave")
 	add := []*Proposal{{Type: ProposalTypeAdd, Add: &Add{KeyPackage: *dave.KeyPackage}}}
-	b2, err := b1.Handle(send(t, pathlessCommit(t, a1, add)))
+	b2, _, err := b1.Handle(send(t, pathlessCommit(t, a1, add)))
 	if err != nil {
 		t.Fatalf("Handle: %v", err)
 	}

@@ -58,7 +58,7 @@ func TestExternalProposal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := g.Handle(send(t, msg)); err != nil {
+	if _, _, err := g.Handle(send(t, msg)); err != nil {
 		t.Fatal(err)
 	}
 	g2, commit, welcome, err := g.Commit(nil)
@@ -83,7 +83,7 @@ func TestExternalProposal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := gb.Handle(send(t, ask)); err != nil {
+	if _, _, err := gb.Handle(send(t, ask)); err != nil {
 		t.Fatal(err)
 	}
 	gb2, _, welcome, err := gb.Commit(nil)
@@ -135,7 +135,7 @@ func TestExternalProposalRules(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := g.Handle(send(t, msg)); !errors.Is(err, ErrBadExternalSender) {
+	if _, _, err := g.Handle(send(t, msg)); !errors.Is(err, ErrBadExternalSender) {
 		t.Errorf("Handle = %v, want %v", err, ErrBadExternalSender)
 	}
 
@@ -148,7 +148,7 @@ func TestExternalProposalRules(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := plain.Handle(send(t, msg)); !errors.Is(err, ErrBadExternalSender) {
+	if _, _, err := plain.Handle(send(t, msg)); !errors.Is(err, ErrBadExternalSender) {
 		t.Errorf("Handle = %v, want %v", err, ErrBadExternalSender)
 	}
 }
@@ -177,7 +177,7 @@ func TestExternalProposalPolicy(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			g, err := a.Handle(send(t, ask))
+			g, _, err := a.Handle(send(t, ask))
 			if !errors.Is(err, tt.want) {
 				t.Fatalf("Handle = %v, want %v", err, tt.want)
 			}

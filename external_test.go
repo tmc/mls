@@ -51,11 +51,11 @@ func testJoinExternal(t *testing.T, cs CipherSuite) {
 		t.Fatal(err)
 	}
 	commit = send(t, commit)
-	a2, err := a1.Handle(commit)
+	a2, _, err := a1.Handle(commit)
 	if err != nil {
 		t.Fatalf("alice handling the external commit: %v", err)
 	}
-	b2, err := b1.Handle(commit)
+	b2, _, err := b1.Handle(commit)
 	if err != nil {
 		t.Fatalf("bob handling the external commit: %v", err)
 	}
@@ -98,7 +98,7 @@ func testJoinExternal(t *testing.T, cs CipherSuite) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := a2.Handle(send(t, stale)); !errors.Is(err, ErrNotForGroup) {
+	if _, _, err := a2.Handle(send(t, stale)); !errors.Is(err, ErrNotForGroup) {
 		t.Errorf("reusing a group info: %v, want %v", err, ErrNotForGroup)
 	}
 
@@ -112,11 +112,11 @@ func testJoinExternal(t *testing.T, cs CipherSuite) {
 		t.Fatal(err)
 	}
 	commit = send(t, commit)
-	a3, err := a2.Handle(commit)
+	a3, _, err := a2.Handle(commit)
 	if err != nil {
 		t.Fatalf("alice handling the resync: %v", err)
 	}
-	c3, err := c2.Handle(commit)
+	c3, _, err := c2.Handle(commit)
 	if err != nil {
 		t.Fatalf("carol handling the resync: %v", err)
 	}
@@ -177,7 +177,7 @@ func TestJoinExternalResyncLeftmost(t *testing.T) {
 		case 5:
 			groups[i] = nil
 		default:
-			if groups[i], err = g.Handle(send(t, commit)); err != nil {
+			if groups[i], _, err = g.Handle(send(t, commit)); err != nil {
 				t.Fatalf("%s handling eve's commit: %v", names[i], err)
 			}
 		}
@@ -199,7 +199,7 @@ func TestJoinExternalResyncLeftmost(t *testing.T) {
 		if g == nil || i == 1 {
 			continue
 		}
-		next, err := g.Handle(send(t, commit))
+		next, _, err := g.Handle(send(t, commit))
 		if err != nil {
 			t.Fatalf("%s handling the resync: %v", names[i], err)
 		}
@@ -332,7 +332,7 @@ func TestJoinExternalPSK(t *testing.T) {
 			if err != nil {
 				return
 			}
-			next, err := a.Handle(send(t, commit))
+			next, _, err := a.Handle(send(t, commit))
 			if !errors.Is(err, tc.handle) {
 				t.Fatalf("Handle = %v, want %v", err, tc.handle)
 			}
