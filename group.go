@@ -32,10 +32,15 @@ type Client struct {
 	// provisioned, or from a client asking to be added (see
 	// [ExternalClient.Propose] and [Client.ProposeAdd]). An accepted
 	// proposal is committed by the member's next commit like any
-	// other. RFC 9420, Section 12.1.8 leaves this decision to the
-	// application; a nil ExternalProposal accepts none. Members
-	// should share a policy, since a member that did not accept a
-	// proposal cannot process a commit that covers it.
+	// other. A nil ExternalProposal accepts proposals from the
+	// senders the group's external_senders extension lists, which
+	// RFC 9420, Section 12.1.8.1 makes the group's authorization of
+	// them, and refuses every client asking to be added, which
+	// authenticates only the key package it carries.
+	//
+	// Members should share a policy: a member does not keep a
+	// proposal it refused, so it cannot process a commit that
+	// refers to that proposal.
 	//
 	// Such a proposal names its group only by group ID and epoch:
 	// its signature does not cover the group context (RFC 9420,
@@ -489,7 +494,8 @@ func (g *Group) Handle(m *Message) (*Group, *AuthenticatedContent, error) {
 //
 // A proposal from outside the group, whether from an external sender
 // or from a client asking to be added, is remembered only if the
-// client's [Client.ExternalProposal] accepts it. At most
+// client's [Client.ExternalProposal] accepts it, or, with no policy,
+// only if it comes from a sender the group provisioned. At most
 // maxProposals proposals are remembered in one epoch.
 //
 // A member that rotates its keys twice in one epoch supersedes its
@@ -505,9 +511,10 @@ func (g *Group) AddProposal(c *AuthenticatedContent) error {
 	case SenderTypeExternal, SenderTypeNewMemberProposal:
 		accept := g.client.ExternalProposal
 		if accept == nil {
-			return ErrExternalProposal
-		}
-		if err := accept(c); err != nil {
+			if c.Content.Sender.Type == SenderTypeNewMemberProposal {
+				return ErrExternalProposal
+			}
+		} else if err := accept(c); err != nil {
 			return fmt.Errorf("%w: %w", ErrExternalProposal, err)
 		}
 	}

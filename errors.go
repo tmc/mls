@@ -214,7 +214,8 @@ var ErrNotResumed = errors.New("mls: group does not resume the one given")
 var ErrReinitialized = errors.New("mls: group has been reinitialized")
 
 // ErrExternalProposal is reported for a proposal from outside the
-// group that the client's [Client.ExternalProposal] did not accept.
+// group that the client's [Client.ExternalProposal] did not accept,
+// or, with no policy, for a client's request to be added.
 var ErrExternalProposal = errors.New("mls: proposal from outside the group not accepted")
 
 // ErrTooManyProposals is reported for a proposal that would take the

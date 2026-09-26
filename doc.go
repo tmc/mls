@@ -40,7 +40,8 @@
 // sender the group provisioned ([ExternalClient.Propose]) or by
 // asking to be added ([Client.ProposeAdd]); a member keeps such a
 // proposal, and so commits it, only if its [Client.ExternalProposal]
-// policy accepts it, and by default accepts none. A member replaces
+// policy accepts it; by default it accepts provisioned senders and
+// refuses requests to be added. A member replaces
 // its own keys with [Group.ProposeUpdate], which keeps the new
 // encryption key so that the member can follow the commit that
 // applies it. A group ends either by losing its members or by being

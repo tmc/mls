@@ -199,6 +199,44 @@ func TestExternalProposalPolicy(t *testing.T) {
 	}
 }
 
+// With no policy, a member accepts proposals from the senders the
+// group provisioned: listing a sender in external_senders is the
+// group's authorization of it (RFC 9420, Section 12.1.8.1).
+func TestExternalProposalDefault(t *testing.T) {
+	cs := testSuite()
+	alice := newTestClient(t, cs, "alice")
+	bob := newTestClient(t, cs, "bob")
+	priv, pub, err := cs.GenerateSignatureKeyPair()
+	if err != nil {
+		t.Fatal(err)
+	}
+	senders := ExternalSenders{{SignatureKey: pub, Credential: Credential{Type: CredentialTypeBasic, Identity: []byte("d")}}}
+	var ext Extensions
+	if err := ext.Set(ExtensionTypeExternalSenders, &senders); err != nil {
+		t.Fatal(err)
+	}
+	g, err := alice.NewGroup([]byte("group"), ext)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := &ExternalClient{CipherSuite: cs, SignaturePriv: priv}
+	add := &Proposal{Type: ProposalTypeAdd, Add: &Add{KeyPackage: *bob.KeyPackage}}
+	msg, err := dir.Propose(g.Context.GroupID, g.Context.Epoch, add)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := g.Handle(send(t, msg)); err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	g2, _, _, err := g.Commit(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := members(g2.Tree); got != 2 {
+		t.Errorf("members = %d, want 2", got)
+	}
+}
+
 // A group remembers a bounded number of proposals in one epoch.
 func TestTooManyProposals(t *testing.T) {
 	a, b, _ := threeMember(t)
