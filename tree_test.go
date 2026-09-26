@@ -369,7 +369,7 @@ func TestResolutionOutOfRange(t *testing.T) {
 	}
 }
 
-// A received tree must have the shape of RFC 9420, Section 12.4.3.1.
+// A received tree must have the shape of RFC 9420, Section 12.4.3.3.
 // A node of the wrong kind for its position is hashed as blank but
 // was read as occupied elsewhere, and a node past the width of the
 // tree is not hashed at all.

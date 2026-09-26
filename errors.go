@@ -87,7 +87,7 @@ var ErrBadUnmergedLeaves = errors.New("mls: malformed unmerged leaves")
 var ErrEmptyTree = errors.New("mls: ratchet tree is empty")
 
 // ErrMalformedTree is reported for a ratchet tree whose array does not
-// have the shape of RFC 9420, Section 12.4.3.1: a leaf at an odd
+// have the shape of RFC 9420, Section 12.4.3.3: a leaf at an odd
 // index or a parent at an even one, a blank last node, or a node past
 // the width of the tree.
 var ErrMalformedTree = errors.New("mls: malformed ratchet tree")
@@ -222,6 +222,6 @@ var ErrExternalProposal = errors.New("mls: proposal from outside the group not a
 var ErrTooManyProposals = errors.New("mls: too many proposals in one epoch")
 
 // ErrSameGroupID is reported by [Group.Branch] for a new group given
-// the group ID of the group it branches from, which RFC 9420, Section
-// 11.3 does not allow.
+// the group ID of the group it branches from. A branch is a new group,
+// and RFC 9420, Sections 11 and 12.4.3.1 ask that group IDs be unique.
 var ErrSameGroupID = errors.New("mls: new group has the group id of the old one")

@@ -114,8 +114,9 @@ func (g *Group) resume(c *Client, groupID []byte, extensions Extensions, usage R
 // 9420, Sections 11.2 and 11.3 require of the new group: it must be
 // at epoch 1, it must match the parameters of the group it resumes,
 // a reinitialized group must be resumed from the epoch that committed
-// the Reinit, and a branch must have a new group ID and hold only
-// members of old.
+// the Reinit, and a branch must hold only members of old. A branch
+// must also have a new group ID, since Section 11 asks that group IDs
+// be unique.
 func (c *Client) Resume(w *Welcome, tree RatchetTree, old *Group) (*Group, error) {
 	g, err := c.join(w, tree, old)
 	if err != nil {

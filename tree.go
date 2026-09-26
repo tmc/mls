@@ -248,7 +248,7 @@ func leavesUnder(x NodeIndex) (first, last LeafIndex) {
 }
 
 // verifyShape checks that t has the shape of RFC 9420, Section
-// 12.4.3.1: every node the kind its position requires, the last node
+// 12.4.3.3: every node the kind its position requires, the last node
 // not blank, and no node past the width of the tree. A received tree
 // is checked for this first, since everything else reads it through
 // that shape.
@@ -410,7 +410,7 @@ func (t RatchetTree) VerifyLeafSignatures(cs CipherSuite, groupID []byte) error 
 
 // Add places leaf at the leftmost blank leaf, extending the tree if
 // every leaf is occupied, and records it as unmerged in each node
-// above it. See RFC 9420, Section 13.4.3.
+// above it. See RFC 9420, Sections 7.7 and 12.1.1.
 func (t *RatchetTree) Add(leaf *LeafNode) LeafIndex {
 	i := LeafIndex(0)
 	for ; i < t.Size(); i++ {
@@ -434,7 +434,7 @@ func (t *RatchetTree) Add(leaf *LeafNode) LeafIndex {
 
 // Update replaces the leaf node at i and blanks the nodes above it,
 // whose keys the old member knew. It does nothing if i is not a leaf
-// of the tree. See RFC 9420, Section 13.4.3.
+// of the tree. See RFC 9420, Section 12.1.2.
 func (t *RatchetTree) Update(i LeafIndex, leaf *LeafNode) {
 	if i >= t.Size() {
 		return
@@ -445,7 +445,7 @@ func (t *RatchetTree) Update(i LeafIndex, leaf *LeafNode) {
 
 // Remove blanks the leaf at i along with the nodes above it, then
 // trims the tree if its right half has emptied. It does nothing if i
-// is not a leaf of the tree. See RFC 9420, Section 13.4.3.
+// is not a leaf of the tree. See RFC 9420, Sections 7.7 and 12.1.3.
 func (t *RatchetTree) Remove(i LeafIndex) {
 	if i >= t.Size() {
 		return
