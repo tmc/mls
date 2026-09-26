@@ -48,7 +48,7 @@ scripts with four or more actors run duplicate client assignments and
 skip others. The results below were produced with this one-line fix:
 
 	-			out = append(out, append(tuple, v))
-	+			out = append(out, append(append([]int(nil), tuple...), v))
+	+			out = append(out, append(tuple[:len(tuple):len(tuple)], v))
 
 `ScriptMatrix` has a second bug: it indexes the pool by a client's
 position among the clients that support a suite, not by its position
@@ -113,6 +113,10 @@ post-quantum ones lie across the whole range. A suite only one client
 supports is played by that client alone. Add
 `-client localhost:50052` to bring in mlspp.
 
+mlspp's interop client keeps the states of earlier runs and can reuse
+their IDs (see the mlspp results below), so restart `mlspp_client`
+between long runs.
+
 ## Results
 
 Passed runs out of total, from 2026-09-24, with the fixed runner. A run
@@ -123,8 +127,9 @@ client in each role. U marks cells whose failures are all
 Unimplemented (see below). tmc/mls also runs suites 5 and 7, which
 openmls does not support, so only tmc ↔ tmc covers them. The table
 predates suites 4 and 6; their results are listed separately below. The
-external_join and branch configs were rerun after `JoinExternal`
-gained pre-shared keys and `Branch` gained extensions.
+external_join and branch configs were rerun later on 2026-09-24,
+after `JoinExternal` gained pre-shared keys and `Branch` gained
+extensions.
 
 | config | script | tmc ↔ tmc | tmc ↔ openmls | openmls ↔ openmls |
 |---|---|---|---|---|
@@ -189,7 +194,8 @@ with a regression test:
   members kept. Members on either implementation then rejected the commit
   (RFC 9420, Section 12.4.3.2). Only deep_random caught it.
 
-No openmls bugs turned up.
+No openmls bugs turned up in these two-client runs; the three-client
+runs below found one.
 
 ### X448 cipher suites
 
@@ -255,7 +261,10 @@ package documentation). openmls, with the changes above, has eight of
 them at the same code points; it has no MLKEM768-P256 or
 MLKEM1024-P384 hybrid, so tmc/mls runs those three alone. Results
 from 2026-09-25, counted as above, summed over the scripts of each
-config (welcome_join: 4 scripts; application: 3; commit: 9):
+config (welcome_join: 4 scripts; application: 3; commit: 9). Only
+these three configs were run on these suites: external_join,
+external_proposals, branch, reinit and deep_random were not, so
+neither was a reinitialization into or out of a post-quantum suite.
 
 | suite | code point | config | tmc ↔ tmc | tmc ↔ openmls | openmls ↔ openmls |
 |---|---|---|---|---|---|
@@ -296,12 +305,13 @@ config (welcome_join: 4 scripts; application: 3; commit: 9):
 All of these pass, including ML-DSA signatures and the
 MLKEM768-X25519 (X-Wing) KEM in both directions, which checks the
 KEMs, DeriveKeyPair and the signature encoding against an independent
-implementation (hpke-rs, libcrux and RustCrypto's ml-dsa).
+implementation (openmls's crypto provider).
 
 ## Results with mlspp
 
 Passed runs out of total, from 2026-09-25, with both runner fixes and
-`-client` tmc/mls first. mlspp supports suites 1–10; the two share
+`-client` tmc/mls first. (With the ScriptMatrix fix the order of the
+`-client` flags does not matter.) mlspp supports suites 1–10; the two share
 1–7, so "tmc ↔ mlspp" covers those seven suites and "mlspp ↔ mlspp"
 covers all ten. Suites 4 and 6 were run later, with `-suite 4` and
 `-suite 6`, and are added into the counts; mlspp is the only
@@ -370,7 +380,7 @@ IDs matched a state left from the earlier suite 6 reinit run, so that
 member's UpdateProposal came from the old group (a group ID seen
 nowhere else in the run) and tmc/mls could not open it. A fourth
 suite 6 invocation against freshly started servers passed 2/2.
-Restart `mlspp_client` between long runs.
+
 
 No tmc/mls or mlspp library bugs turned up.
 
@@ -392,7 +402,9 @@ and reinit were not run three-way (commit/add alone would be about
   lists `KeyPackage.extensions` as a GREASE field and requires only
   GREASE values in `LeafNode.extensions` to appear in the
   capabilities; Section 7.3 checks only the LeafNode's own
-  extensions. openmls is at fault. The failures follow mlspp's random
+  extensions. Section 13.4 is more direct: "A client processing a
+  KeyPackage object MUST ignore ... all unknown extensions in the
+  extensions and leaf_node.extensions fields". openmls is at fault. The failures follow mlspp's random
   GREASE draw; in external_proposals every one has an openmls member
   handling an Add of an mlspp KeyPackage. tmc/mls accepts these
   KeyPackages.
