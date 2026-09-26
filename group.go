@@ -463,6 +463,23 @@ func (g *Group) Protect(authenticatedData, plaintext []byte) (*Message, error) {
 // and every committer consider.
 const maxProposals = 1024
 
+// maxSenderProposals is the most proposals a group remembers from one
+// sender in one epoch, so that no one sender can fill maxProposals and
+// keep the others from proposing. Clients asking to be added share one
+// sender, and so share this limit.
+const maxSenderProposals = 64
+
+// sentBy reports how many of the proposals g remembers came from s.
+func (g *Group) sentBy(s Sender) int {
+	n := 0
+	for _, c := range g.proposals {
+		if c.Content.Sender == s {
+			n++
+		}
+	}
+	return n
+}
+
 // Handle processes a message sent to the group, and is how a member
 // follows it. It returns the message's authenticated content together
 // with the group's state after the message:
@@ -515,7 +532,8 @@ func (g *Group) Handle(m *Message) (*Group, *AuthenticatedContent, error) {
 // or from a client asking to be added, is remembered only if the
 // client's [Client.ExternalProposal] accepts it, or, with no policy,
 // only if it comes from a sender the group provisioned. At most
-// maxProposals proposals are remembered in one epoch.
+// maxProposals proposals are remembered in one epoch, and at most
+// maxSenderProposals from any one sender.
 //
 // A member that rotates its keys twice in one epoch supersedes its
 // own earlier update: only the later one is remembered. RFC 9420,
@@ -560,8 +578,13 @@ func (g *Group) AddProposal(c *AuthenticatedContent) error {
 	update = update && c.Content.Proposal.Type == ProposalTypeUpdate
 	superseded, ok := g.updated[i]
 	ok = ok && update
-	if !ok && len(g.proposals) >= maxProposals {
-		return ErrTooManyProposals
+	if !ok {
+		if len(g.proposals) >= maxProposals {
+			return ErrTooManyProposals
+		}
+		if g.sentBy(c.Content.Sender) >= maxSenderProposals {
+			return fmt.Errorf("%w: from one sender", ErrTooManyProposals)
+		}
 	}
 	if update {
 		if ok {

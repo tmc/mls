@@ -237,25 +237,67 @@ func TestExternalProposalDefault(t *testing.T) {
 	}
 }
 
-// A group remembers a bounded number of proposals in one epoch.
+// A group remembers a bounded number of proposals from one sender in
+// one epoch, and others may still propose once one sender reaches it.
 func TestTooManyProposals(t *testing.T) {
 	a, b, _ := threeMember(t)
-	stageUpdate(t, a, b)
-	for i := 1; i <= maxProposals; i++ {
-		p := externalPSK("k")
-		p.PreSharedKey.PSK.PSKNonce[0] = byte(i)
-		p.PreSharedKey.PSK.PSKNonce[1] = byte(i >> 8)
-		_, err := a.Propose(p)
-		if i < maxProposals && err != nil {
+	for i := 1; i <= maxSenderProposals+1; i++ {
+		_, err := a.Propose(numberedPSK(i))
+		if i <= maxSenderProposals && err != nil {
 			t.Fatalf("proposal %d: %v", i, err)
 		}
-		if i == maxProposals && !errors.Is(err, ErrTooManyProposals) {
+		if i > maxSenderProposals && !errors.Is(err, ErrTooManyProposals) {
 			t.Fatalf("proposal %d: %v, want %v", i, err, ErrTooManyProposals)
 		}
 	}
+	stageUpdate(t, a, b)
 	// An update that supersedes a staged one adds nothing.
 	stageUpdate(t, a, b)
-	if n := len(a.proposals); n != maxProposals {
-		t.Errorf("%d proposals staged, want %d", n, maxProposals)
+	if n := len(a.proposals); n != maxSenderProposals+1 {
+		t.Errorf("%d proposals staged, want %d", n, maxSenderProposals+1)
 	}
+}
+
+// A group remembers a bounded number of proposals in all, however
+// many senders they come from.
+func TestTooManySenders(t *testing.T) {
+	cs := testSuite()
+	alice := newTestClient(t, cs, "alice")
+	priv, pub, err := cs.GenerateSignatureKeyPair()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var senders ExternalSenders
+	for range maxProposals / maxSenderProposals {
+		senders = append(senders, ExternalSender{SignatureKey: pub, Credential: Credential{Type: CredentialTypeBasic, Identity: []byte("d")}})
+	}
+	var ext Extensions
+	if err := ext.Set(ExtensionTypeExternalSenders, &senders); err != nil {
+		t.Fatal(err)
+	}
+	g, err := alice.NewGroup([]byte("group"), ext)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := range senders {
+		dir := &ExternalClient{CipherSuite: cs, Index: uint32(i), SignaturePriv: priv}
+		for j := range maxSenderProposals {
+			m, err := dir.Propose(g.Context.GroupID, g.Context.Epoch, numberedPSK(j))
+			if err != nil {
+				t.Fatal(err)
+			}
+			handle(t, g, m)
+		}
+	}
+	if _, err := g.Propose(numberedPSK(0)); !errors.Is(err, ErrTooManyProposals) {
+		t.Errorf("Propose = %v, want %v", err, ErrTooManyProposals)
+	}
+}
+
+// numberedPSK returns an external PSK proposal distinct for each i.
+func numberedPSK(i int) *Proposal {
+	p := externalPSK("k")
+	p.PreSharedKey.PSK.PSKNonce[0] = byte(i)
+	p.PreSharedKey.PSK.PSKNonce[1] = byte(i >> 8)
+	return p
 }

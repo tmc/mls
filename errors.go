@@ -224,7 +224,8 @@ var ErrReinitialized = errors.New("mls: group has been reinitialized")
 var ErrExternalProposal = errors.New("mls: proposal from outside the group not accepted")
 
 // ErrTooManyProposals is reported for a proposal that would take the
-// number a group remembers in one epoch past the limit.
+// number a group remembers in one epoch past the limit, in all or
+// from its sender.
 var ErrTooManyProposals = errors.New("mls: too many proposals in one epoch")
 
 // ErrMembership is reported by [Group.Reinitialize] and
