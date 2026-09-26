@@ -253,7 +253,7 @@ func TestExternalCommitRules(t *testing.T) {
 		{"same pre-shared key twice", Commit{Path: bob, Proposals: []ProposalOrRef{ei, psk, psk}}, ErrProposalList},
 		{"resync", Commit{Path: bob, Proposals: []ProposalOrRef{ei, remove(b.Index), psk}}, nil},
 	} {
-		if err := a.Tree.externalCommitOK(&tc.commit, &a.Context); !errors.Is(err, tc.want) {
+		if err := a.Tree.externalCommitOK(&tc.commit, a.client.sameIdentity, &a.Context); !errors.Is(err, tc.want) {
 			t.Errorf("%s: got %v, want %v", tc.name, err, tc.want)
 		}
 	}

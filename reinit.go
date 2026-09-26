@@ -42,6 +42,10 @@ func (g *Group) Reinit() *Reinit { return g.reinit }
 //
 // Any member of g may do this, not only the one that committed the
 // Reinit, so that a group is not stranded by whoever went offline.
+// Section 11.2 makes the new group one "with the same membership", so
+// c must identify the same member as g's own leaf, and c and members
+// together must identify exactly g's members, as c.SameIdentity
+// judges.
 func (g *Group) Reinitialize(c *Client, members []*KeyPackage) (*Group, *Message, error) {
 	if g.reinit == nil {
 		return nil, nil, ErrNotReinitialized
@@ -53,6 +57,11 @@ func (g *Group) Reinitialize(c *Client, members []*KeyPackage) (*Group, *Message
 	if c.CipherSuite != ri.CipherSuite {
 		return nil, nil, ErrUnsupportedCipherSuite
 	}
+	self := g.Tree.Leaf(g.Index)
+	if self == nil || !c.sameIdentity(&c.KeyPackage.LeafNode.Credential, &self.Credential) ||
+		!c.sameMembers(g.Tree, joinerCredentials(c, members), true) {
+		return nil, nil, ErrMembership
+	}
 	return g.resume(c, ri.GroupID, ri.Extensions, ResumptionPSKUsageReinit, members)
 }
 
@@ -61,14 +70,31 @@ func (g *Group) Reinitialize(c *Client, members []*KeyPackage) (*Group, *Message
 // Section 11.3 describes. The new group's context carries extensions,
 // which need not be g's; pass g.Context.Extensions to keep them.
 // members are the key packages of the subgroup's members, which the
-// caller fetches afresh; g's own member is the creator and needs
-// none. It returns the new group at epoch 1 and the welcome message
-// for the others.
+// caller fetches afresh, and each must identify a member of g, as
+// g's client's SameIdentity judges; g's own member is the creator and
+// needs none. It returns the new group at epoch 1 and the welcome
+// message for the others.
+//
+// Unlike [Group.Reinitialize], Branch needs no new client: the
+// suite is g's, and the commit that adds the members replaces the
+// creator's leaf keys along its update path.
 func (g *Group) Branch(groupID []byte, extensions Extensions, members []*KeyPackage) (*Group, *Message, error) {
 	if bytes.Equal(groupID, g.Context.GroupID) {
 		return nil, nil, ErrSameGroupID
 	}
+	if !g.client.sameMembers(g.Tree, joinerCredentials(g.client, members), false) {
+		return nil, nil, ErrMembership
+	}
 	return g.resume(g.client, groupID, extensions, ResumptionPSKUsageBranch, members)
+}
+
+// joinerCredentials returns the credentials of c and of members.
+func joinerCredentials(c *Client, members []*KeyPackage) []*Credential {
+	creds := []*Credential{&c.KeyPackage.LeafNode.Credential}
+	for _, kp := range members {
+		creds = append(creds, &kp.LeafNode.Credential)
+	}
+	return creds
 }
 
 // resume has c create a new group linked to g by a resumption
@@ -114,9 +140,10 @@ func (g *Group) resume(c *Client, groupID []byte, extensions Extensions, usage R
 // 9420, Sections 11.2 and 11.3 require of the new group: it must be
 // at epoch 1, it must match the parameters of the group it resumes,
 // a reinitialized group must be resumed from the epoch that committed
-// the Reinit, and a branch must hold only members of old. A branch
-// must also have a new group ID, since Section 11 asks that group IDs
-// be unique.
+// the Reinit, a reinitialized group must hold exactly the members of
+// old, and a branch must hold only members of old, all as
+// c.SameIdentity judges. A branch must also have a new group ID, since
+// Section 11 asks that group IDs be unique.
 func (c *Client) Resume(w *Welcome, tree RatchetTree, old *Group) (*Group, error) {
 	g, err := c.join(w, tree, old)
 	if err != nil {
@@ -137,7 +164,8 @@ func (c *Client) Resume(w *Welcome, tree RatchetTree, old *Group) (*Group, error
 			ri.Version != g.Context.Version ||
 			ri.CipherSuite != g.CipherSuite ||
 			!bytes.Equal(ri.GroupID, g.Context.GroupID) ||
-			!sameExtensions(ri.Extensions, g.Context.Extensions) {
+			!sameExtensions(ri.Extensions, g.Context.Extensions) ||
+			!c.sameMembers(old.Tree, g.memberCredentials(), true) {
 			return nil, ErrNotResumed
 		}
 	case ResumptionPSKUsageBranch:
@@ -145,18 +173,22 @@ func (c *Client) Resume(w *Welcome, tree RatchetTree, old *Group) (*Group, error
 			bytes.Equal(g.Context.GroupID, old.Context.GroupID) {
 			return nil, ErrNotResumed
 		}
-		// Every leaf of the subgroup must match one of the
-		// original group's, which this package takes to mean
-		// that it presents the same credential.
-		for _, n := range g.Tree.Members() {
-			if !old.Tree.hasCredential(&n.Credential) {
-				return nil, ErrNotResumed
-			}
+		if !c.sameMembers(old.Tree, g.memberCredentials(), false) {
+			return nil, ErrNotResumed
 		}
 	default:
 		return nil, ErrNotResumed
 	}
 	return g, nil
+}
+
+// memberCredentials returns the credentials of g's members.
+func (g *Group) memberCredentials() []*Credential {
+	var creds []*Credential
+	for _, n := range g.Tree.Members() {
+		creds = append(creds, &n.Credential)
+	}
+	return creds
 }
 
 // sameExtensions reports whether two extension lists are equal. The
@@ -174,22 +206,80 @@ func sameExtensions(a, b Extensions) bool {
 	return true
 }
 
-// hasCredential reports whether any member of t presents c. RFC 9420,
-// Section 11.3 leaves the comparison of identifiers to the
-// application; this package compares the credentials themselves.
-func (t RatchetTree) hasCredential(c *Credential) bool {
-	want, err := Marshal(c)
+// sameIdentity reports whether a and b identify the same member,
+// by c.SameIdentity if it is set and otherwise by comparing the
+// credentials.
+func (c *Client) sameIdentity(a, b *Credential) bool {
+	if c.SameIdentity != nil {
+		return c.SameIdentity(a, b)
+	}
+	x, err := Marshal(a)
 	if err != nil {
 		return false
 	}
+	y, err := Marshal(b)
+	return err == nil && bytes.Equal(x, y)
+}
+
+// sameMembers reports whether creds can be matched one to one with
+// members of t, each credential to a member it identifies, and, if
+// all is set, whether that matching covers every member of t. A group
+// may hold several leaves of one identity, one per device, so the
+// matching counts them: a reinitialization carries as many of each as
+// the old group held, and a branch no more. See RFC 9420, Sections
+// 11.2 and 11.3.
+func (c *Client) sameMembers(t RatchetTree, creds []*Credential, all bool) bool {
+	var old []*Credential
 	for _, n := range t.Members() {
-		got, err := Marshal(&n.Credential)
-		if err != nil {
+		old = append(old, &n.Credential)
+	}
+	if len(creds) > len(old) || all && len(creds) != len(old) {
+		return false
+	}
+	if c.SameIdentity == nil {
+		// Byte equality partitions the credentials, so counting
+		// each encoding suffices.
+		count := make(map[string]int)
+		for _, cred := range old {
+			b, err := Marshal(cred)
+			if err != nil {
+				return false
+			}
+			count[string(b)]++
+		}
+		for _, cred := range creds {
+			b, err := Marshal(cred)
+			if err != nil || count[string(b)] == 0 {
+				return false
+			}
+			count[string(b)]--
+		}
+		return true
+	}
+	// An application's SameIdentity need not partition credentials,
+	// so find a maximum bipartite matching by augmenting paths.
+	match := make([]int, len(old)) // match[j] is the cred holding old[j], or -1
+	for j := range match {
+		match[j] = -1
+	}
+	var augment func(i int, seen []bool) bool
+	augment = func(i int, seen []bool) bool {
+		for j, o := range old {
+			if seen[j] || !c.sameIdentity(creds[i], o) {
+				continue
+			}
+			seen[j] = true
+			if match[j] < 0 || augment(match[j], seen) {
+				match[j] = i
+				return true
+			}
+		}
+		return false
+	}
+	for i := range creds {
+		if !augment(i, make([]bool, len(old))) {
 			return false
 		}
-		if bytes.Equal(want, got) {
-			return true
-		}
 	}
-	return false
+	return true
 }

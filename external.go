@@ -113,11 +113,11 @@ func (c *Client) JoinExternal(info *GroupInfo, tree RatchetTree, psks []PreShare
 // externalCommitOK checks the rules a commit from a new member must
 // meet: it carries an update path, and the rules on its proposals
 // below. See RFC 9420, Section 12.4.3.2.
-func (t RatchetTree) externalCommitOK(commit *Commit, ctx *GroupContext) error {
+func (t RatchetTree) externalCommitOK(commit *Commit, same func(a, b *Credential) bool, ctx *GroupContext) error {
 	if commit.Path == nil {
 		return ErrBadExternalCommit
 	}
-	return t.externalProposalsOK(commit, &commit.Path.LeafNode.Credential, ctx)
+	return t.externalProposalsOK(commit, &commit.Path.LeafNode.Credential, same, ctx)
 }
 
 // externalProposalType reports whether a party outside the group may
@@ -135,14 +135,9 @@ func externalProposalType(t ProposalType) bool {
 // member that presents the credential cred: exactly one ExternalInit,
 // nothing by reference, and nothing but PreSharedKeys and at most one
 // Remove besides. The Remove may only be of the joiner's own earlier
-// leaf, which is the resync of RFC 9420, Section 12.4.3.2; this
-// package takes that to mean a leaf presenting the same credential,
-// as [Client.Resume] does for a branch.
-func (t RatchetTree) externalProposalsOK(commit *Commit, cred *Credential, ctx *GroupContext) error {
-	want, err := Marshal(cred)
-	if err != nil {
-		return err
-	}
+// leaf, which is the resync of RFC 9420, Section 12.4.3.2: a leaf
+// whose credential same reports identifies the same member as cred.
+func (t RatchetTree) externalProposalsOK(commit *Commit, cred *Credential, same func(a, b *Credential) bool, ctx *GroupContext) error {
 	inits, removes := 0, 0
 	psks := make(map[string]bool)
 	for _, p := range commit.Proposals {
@@ -162,11 +157,7 @@ func (t RatchetTree) externalProposalsOK(commit *Commit, cred *Credential, ctx *
 			if leaf == nil {
 				return ErrLeafRange
 			}
-			got, err := Marshal(&leaf.Credential)
-			if err != nil {
-				return err
-			}
-			if !bytes.Equal(got, want) {
+			if !same(&leaf.Credential, cred) {
 				return fmt.Errorf("%w: remove of another member", ErrBadExternalCommit)
 			}
 		case ProposalTypePreSharedKey:

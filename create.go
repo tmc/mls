@@ -370,7 +370,7 @@ func (g *Group) commit(extra []*Proposal, sender SenderType) (*Group, *Message, 
 		proposals = append(proposals, proposal{p, from})
 	}
 	if sender == SenderTypeNewMemberCommit {
-		if err := g.Tree.externalProposalsOK(commit, &g.client.KeyPackage.LeafNode.Credential, &g.Context); err != nil {
+		if err := g.Tree.externalProposalsOK(commit, &g.client.KeyPackage.LeafNode.Credential, g.client.sameIdentity, &g.Context); err != nil {
 			return nil, nil, nil, err
 		}
 	} else if err := g.Tree.validateProposals(proposals, g.Index, &g.Context); err != nil {

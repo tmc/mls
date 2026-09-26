@@ -48,6 +48,16 @@ type Client struct {
 	// asks, accepts proposals meant for another group of that ID.
 	ExternalProposal func(c *AuthenticatedContent) error
 
+	// SameIdentity reports whether two credentials identify the
+	// same member. RFC 9420 leaves this to the application
+	// (Sections 11.3 and 12.4.3.2), and this package asks it when
+	// a branch or reinitialization must hold only the old group's
+	// members and when an external commit removes the joiner's
+	// earlier leaf. A nil SameIdentity compares the credentials
+	// byte for byte, which fails for an X.509 credential whose
+	// certificate changed with the signature key.
+	SameIdentity func(a, b *Credential) bool
+
 	// Padding blurs the length of the messages [Group.Protect]
 	// produces: the plaintext is padded with zeros until its length
 	// is a multiple of Padding. Zero or one means no padding, which
@@ -608,7 +618,7 @@ func (g *Group) ApplyCommit(c *AuthenticatedContent) (*Group, error) {
 	commit := c.Content.Commit
 	external := c.Content.Sender.Type == SenderTypeNewMemberCommit
 	if external {
-		if err := g.Tree.externalCommitOK(commit, &g.Context); err != nil {
+		if err := g.Tree.externalCommitOK(commit, g.client.sameIdentity, &g.Context); err != nil {
 			return nil, err
 		}
 	}

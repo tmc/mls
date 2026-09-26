@@ -3,6 +3,7 @@ package mls
 import (
 	"bytes"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/tmc/mls/tlssyntax"
@@ -120,6 +121,141 @@ func TestReinit(t *testing.T) {
 	_ = carol
 }
 
+// A reinitialized group is "a new group with the same membership"
+// (RFC 9420, Section 11.2): Reinitialize refuses to build any other,
+// and Resume refuses a welcome into one.
+func TestReinitMembership(t *testing.T) {
+	cs := testSuite()
+	_, _, _, ga, gb, _ := setup(t, cs)
+	ri := &Reinit{GroupID: []byte("successor"), Version: Version10, CipherSuite: cs}
+	ga2, commit, _, err := ga.Commit([]*Proposal{{Type: ProposalTypeReinit, Reinit: ri}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	gb2, _, err := gb.Handle(send(t, commit))
+	if err != nil {
+		t.Fatal(err)
+	}
+	kp := func(name string) *KeyPackage { return newTestClient(t, cs, name).KeyPackage }
+	tests := []struct {
+		name    string
+		self    string
+		members []*KeyPackage
+	}{
+		{"missing member", "alice", []*KeyPackage{kp("bob")}},
+		{"stranger", "alice", []*KeyPackage{kp("bob"), kp("carol"), kp("dave")}},
+		{"stranger instead", "alice", []*KeyPackage{kp("bob"), kp("dave")}},
+		{"not self", "dave", []*KeyPackage{kp("bob"), kp("carol")}},
+		{"identity twice", "alice", []*KeyPackage{kp("bob"), kp("carol"), kp("carol")}},
+		{"identity twice for a missing one", "alice", []*KeyPackage{kp("bob"), kp("bob")}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, _, err := ga2.Reinitialize(newTestClient(t, cs, tt.self), tt.members)
+			if !errors.Is(err, ErrMembership) {
+				t.Errorf("Reinitialize = %v, want %v", err, ErrMembership)
+			}
+		})
+		// The same holds with an application's SameIdentity, which
+		// is matched by a different path.
+		t.Run(tt.name+"/SameIdentity", func(t *testing.T) {
+			c := newTestClient(t, cs, tt.self)
+			c.SameIdentity = func(a, b *Credential) bool { return bytes.Equal(a.Identity, b.Identity) }
+			_, _, err := ga2.Reinitialize(c, tt.members)
+			if !errors.Is(err, ErrMembership) {
+				t.Errorf("Reinitialize = %v, want %v", err, ErrMembership)
+			}
+		})
+	}
+
+	// A welcome that brings a stranger along is refused.
+	bob2 := newTestClient(t, cs, "bob")
+	next, welcome, err := ga2.resume(newTestClient(t, cs, "alice"), ri.GroupID, nil, ResumptionPSKUsageReinit,
+		[]*KeyPackage{bob2.KeyPackage, kp("carol"), kp("dave")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := bob2.Resume(send(t, welcome).Welcome, next.Tree, gb2); !errors.Is(err, ErrNotResumed) {
+		t.Errorf("Resume = %v, want %v", err, ErrNotResumed)
+	}
+
+	// So is one that brings a member's identity in twice.
+	bob3 := newTestClient(t, cs, "bob")
+	next, welcome, err = ga2.resume(newTestClient(t, cs, "alice"), ri.GroupID, nil, ResumptionPSKUsageReinit,
+		[]*KeyPackage{bob3.KeyPackage, kp("carol"), kp("carol")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := bob3.Resume(send(t, welcome).Welcome, next.Tree, gb2); !errors.Is(err, ErrNotResumed) {
+		t.Errorf("Resume with an identity twice = %v, want %v", err, ErrNotResumed)
+	}
+}
+
+// A member may hold several leaves of one identity, one per device,
+// and a reinitialization carries each of them.
+func TestReinitTwoDevices(t *testing.T) {
+	cs := testSuite()
+	alice := newTestClient(t, cs, "alice")
+	g, err := alice.NewGroup([]byte("group"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	laptop := newTestClient(t, cs, "alice")
+	bob := newTestClient(t, cs, "bob")
+	ri := &Reinit{GroupID: []byte("successor"), Version: Version10, CipherSuite: cs}
+	g, _, _, err = g.Commit([]*Proposal{
+		{Type: ProposalTypeAdd, Add: &Add{KeyPackage: *laptop.KeyPackage}},
+		{Type: ProposalTypeAdd, Add: &Add{KeyPackage: *bob.KeyPackage}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	g2, _, _, err := g.Commit([]*Proposal{{Type: ProposalTypeReinit, Reinit: ri}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	kp := func(name string) *KeyPackage { return newTestClient(t, cs, name).KeyPackage }
+	if _, _, err := g2.Reinitialize(newTestClient(t, cs, "alice"), []*KeyPackage{kp("alice"), kp("bob")}); err != nil {
+		t.Errorf("Reinitialize with both devices: %v", err)
+	}
+	if _, _, err := g2.Reinitialize(newTestClient(t, cs, "alice"), []*KeyPackage{kp("bob")}); !errors.Is(err, ErrMembership) {
+		t.Errorf("Reinitialize without the second device = %v, want %v", err, ErrMembership)
+	}
+}
+
+// A branch brings each old member in at most once.
+func TestBranchIdentityTwice(t *testing.T) {
+	cs := testSuite()
+	_, _, _, ga, _, _ := setup(t, cs)
+	b1 := newTestClient(t, cs, "bob")
+	b2 := newTestClient(t, cs, "bob")
+	if _, _, err := ga.Branch([]byte("subgroup"), nil, []*KeyPackage{b1.KeyPackage, b2.KeyPackage}); !errors.Is(err, ErrMembership) {
+		t.Errorf("Branch = %v, want %v", err, ErrMembership)
+	}
+}
+
+// A client's SameIdentity decides which credentials name the same
+// member, as when a member's certificate changes with its keys.
+func TestBranchSameIdentity(t *testing.T) {
+	cs := testSuite()
+	_, _, _, ga, _, _ := setup(t, cs)
+	bob2 := newTestClient(t, cs, "bob@laptop")
+	if _, _, err := ga.Branch([]byte("subgroup"), nil, []*KeyPackage{bob2.KeyPackage}); !errors.Is(err, ErrMembership) {
+		t.Fatalf("Branch = %v, want %v", err, ErrMembership)
+	}
+	user := func(c *Credential) string { name, _, _ := strings.Cut(string(c.Identity), "@"); return name }
+	same := func(a, b *Credential) bool { return user(a) == user(b) }
+	ga.client.SameIdentity = same
+	bob2.SameIdentity = same
+	sub, welcome, err := ga.Branch([]byte("subgroup"), nil, []*KeyPackage{bob2.KeyPackage})
+	if err != nil {
+		t.Fatalf("Branch: %v", err)
+	}
+	if _, err := bob2.Resume(send(t, welcome).Welcome, sub.Tree, ga); err != nil {
+		t.Errorf("Resume: %v", err)
+	}
+}
+
 // TestBranch covers RFC 9420, Section 11.3: a member forms a subgroup
 // of the original group's members.
 func TestBranch(t *testing.T) {
@@ -146,9 +282,13 @@ func TestBranch(t *testing.T) {
 	}
 
 	// A client that was not in the original group cannot be
-	// branched into the subgroup.
+	// branched into the subgroup, and a welcome that tries to is
+	// refused.
 	dave := newTestClient(t, cs, "dave")
-	sub, welcome, err = ga.Branch([]byte("subgroup"), ga.Context.Extensions, []*KeyPackage{dave.KeyPackage})
+	if _, _, err := ga.Branch([]byte("subgroup"), ga.Context.Extensions, []*KeyPackage{dave.KeyPackage}); !errors.Is(err, ErrMembership) {
+		t.Errorf("Branch = %v, want %v", err, ErrMembership)
+	}
+	sub, welcome, err = ga.resume(ga.client, []byte("subgroup"), ga.Context.Extensions, ResumptionPSKUsageBranch, []*KeyPackage{dave.KeyPackage})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -237,10 +377,12 @@ func TestReinitCipherSuite(t *testing.T) {
 	}
 	alice2 := newTestClient(t, next, "alice")
 	bob2 := newTestClient(t, next, "bob")
-	if _, _, err := ga2.Reinitialize(newTestClient(t, cs, "alice"), []*KeyPackage{bob2.KeyPackage}); !errors.Is(err, ErrUnsupportedCipherSuite) {
+	carol2 := newTestClient(t, next, "carol")
+	joiners := []*KeyPackage{bob2.KeyPackage, carol2.KeyPackage}
+	if _, _, err := ga2.Reinitialize(newTestClient(t, cs, "alice"), joiners); !errors.Is(err, ErrUnsupportedCipherSuite) {
 		t.Errorf("Reinitialize with a client of the old suite = %v, want %v", err, ErrUnsupportedCipherSuite)
 	}
-	na, welcome, err := ga2.Reinitialize(alice2, []*KeyPackage{bob2.KeyPackage})
+	na, welcome, err := ga2.Reinitialize(alice2, joiners)
 	if err != nil {
 		t.Fatalf("Reinitialize: %v", err)
 	}
@@ -276,7 +418,8 @@ func TestResumeReinitEpoch(t *testing.T) {
 	early := *ga2
 	early.Context.Epoch--
 	bob2 := newTestClient(t, cs, "bob")
-	next, welcome, err := early.Reinitialize(newTestClient(t, cs, "alice"), []*KeyPackage{bob2.KeyPackage})
+	carol2 := newTestClient(t, cs, "carol")
+	next, welcome, err := early.Reinitialize(newTestClient(t, cs, "alice"), []*KeyPackage{bob2.KeyPackage, carol2.KeyPackage})
 	if err != nil {
 		t.Fatal(err)
 	}

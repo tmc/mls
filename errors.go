@@ -222,6 +222,12 @@ var ErrExternalProposal = errors.New("mls: proposal from outside the group not a
 // number a group remembers in one epoch past the limit.
 var ErrTooManyProposals = errors.New("mls: too many proposals in one epoch")
 
+// ErrMembership is reported by [Group.Reinitialize] and
+// [Group.Branch] for a new group whose members are not the ones RFC
+// 9420, Sections 11.2 and 11.3 allow: the old group's members, all of
+// them for a reinitialization and some of them for a branch.
+var ErrMembership = errors.New("mls: new group's members do not match the old group's")
+
 // ErrSameGroupID is reported by [Group.Branch] for a new group given
 // the group ID of the group it branches from. A branch is a new group,
 // and RFC 9420, Sections 11 and 12.4.3.1 ask that group IDs be unique.
