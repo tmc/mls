@@ -680,3 +680,11 @@ func TestPublicHandshake(t *testing.T) {
 		})
 	}
 }
+
+// A nil message is an error, not a panic.
+func TestHandleNil(t *testing.T) {
+	a, _, _ := threeMember(t)
+	if g, _, err := a.Handle(nil); !errors.Is(err, ErrNotForGroup) || g != nil {
+		t.Errorf("Handle(nil) = %v, %v, want nil, %v", g, err, ErrNotForGroup)
+	}
+}

@@ -344,6 +344,9 @@ func (g *Group) Unprotect(m *Message) (*AuthenticatedContent, error) {
 		advance func()
 		err     error
 	)
+	if m == nil {
+		return nil, ErrNotForGroup
+	}
 	if m.Version != g.Context.Version {
 		return nil, ErrUnsupportedVersion
 	}
