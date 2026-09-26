@@ -32,8 +32,9 @@ const (
 
 // Post-quantum cipher suites, from draft-ietf-mls-pq-ciphersuites-06.
 // The draft leaves the code points to IANA, which has not yet assigned
-// them; these are provisional and will change. See the package
-// documentation.
+// them; these are provisional and will change. A group, key package or
+// stored state in one of these suites may not be understood by a later
+// version of this package. See the package documentation.
 const (
 	MLKEM768X25519AES128GCMSHA256Ed25519        CipherSuite = 0x004F // TBD1
 	MLKEM768X25519AES256GCMSHA384Ed25519        CipherSuite = 0x004E // TBD2

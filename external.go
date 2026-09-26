@@ -22,6 +22,13 @@ import (
 // carry. Their secrets come from c.PSK, and each nonce must be fresh
 // and as long as the suite's hash output (RFC 9420, Section 8.4).
 //
+// A member rejoining after losing its state resyncs: the commit also
+// removes the member's prior leaf, which is the leaf holding c's
+// signature key. A client that has since changed its signature key
+// finds no such leaf, and its prior leaf stays in the group until a
+// member removes it. The prior leaf is not looked for by credential,
+// since a member may hold one leaf per device under one identity.
+//
 // A GroupInfo is specific to an epoch, and the join ends that epoch,
 // so each GroupInfo is good for one external join.
 // See RFC 9420, Section 12.4.3.2.
