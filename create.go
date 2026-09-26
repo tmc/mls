@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"cmp"
 	"crypto/rand"
+	"fmt"
 	"maps"
 	"slices"
 	"time"
@@ -116,6 +117,9 @@ func (g *Group) Propose(p *Proposal) (*Message, error) {
 	if g.reinit != nil {
 		return nil, ErrReinitialized
 	}
+	if err := fillPSKNonce(g.CipherSuite, p); err != nil {
+		return nil, err
+	}
 	c := &AuthenticatedContent{
 		WireFormat: g.handshakeWireFormat(SenderTypeMember),
 		Content: FramedContent{
@@ -134,6 +138,29 @@ func (g *Group) Propose(p *Proposal) (*Message, error) {
 		return nil, err
 	}
 	return g.frame(c)
+}
+
+// fillPSKNonce gives a PreSharedKey proposal that has no psk_nonce a
+// fresh one of KDF.Nh random bytes, as RFC 9420, Section 8.4 requires.
+// A nonce the caller set is kept if it has that length, and refused
+// otherwise, before the proposal is signed.
+func fillPSKNonce(cs CipherSuite, p *Proposal) error {
+	if p.Type != ProposalTypePreSharedKey || p.PreSharedKey == nil {
+		return nil
+	}
+	id := &p.PreSharedKey.PSK
+	if n := len(id.PSKNonce); n != 0 {
+		if n != cs.HashSize() {
+			return fmt.Errorf("%w: psk_nonce of %d bytes", ErrProposalList, n)
+		}
+		return nil
+	}
+	nonce := make([]byte, cs.HashSize())
+	if _, err := rand.Read(nonce); err != nil {
+		return err
+	}
+	id.PSKNonce = nonce
+	return nil
 }
 
 // handshakeWireFormat reports how g frames a handshake message from a
@@ -337,6 +364,11 @@ func (g *Group) commit(extra []*Proposal, sender SenderType) (*Group, *Message, 
 		return nil, nil, nil, ErrReinitialized
 	}
 	cs := g.CipherSuite
+	for _, p := range extra {
+		if err := fillPSKNonce(cs, p); err != nil {
+			return nil, nil, nil, err
+		}
+	}
 	commit := &Commit{}
 	from := Sender{Type: sender}
 	if sender == SenderTypeMember {

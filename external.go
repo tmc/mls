@@ -279,6 +279,9 @@ func (c *Client) ProposeAdd(groupID []byte, epoch uint64) (*Message, error) {
 // not have, and must be sent as a public message, which its sender
 // has no keys to encrypt. See RFC 9420, Sections 6.1 and 12.1.8.
 func proposeExternal(cs CipherSuite, priv []byte, from Sender, groupID []byte, epoch uint64, p *Proposal) (*Message, error) {
+	if err := fillPSKNonce(cs, p); err != nil {
+		return nil, err
+	}
 	c := &AuthenticatedContent{
 		WireFormat: WireFormatPublicMessage,
 		Content: FramedContent{

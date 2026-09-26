@@ -3,6 +3,7 @@ package mls
 import (
 	"bytes"
 	"encoding/hex"
+	"errors"
 	"testing"
 )
 
@@ -199,7 +200,7 @@ func TestStagedInvalidLeftOut(t *testing.T) {
 		{"psk nonce shorter than the hash", func(t *testing.T, a, b, c *Group) {
 			p := externalPSK("known")
 			p.PreSharedKey.PSK.PSKNonce = p.PreSharedKey.PSK.PSKNonce[:16]
-			stage(t, b, p, a, c)
+			stageRaw(t, a, b, p)
 			stage(t, c, add(dave), a, b)
 		}, 4},
 		{"remove of a blank leaf", func(t *testing.T, a, b, c *Group) {
@@ -245,5 +246,46 @@ func TestAddProposalBadKeyPackage(t *testing.T) {
 	}
 	if n := len(a.proposals); n != 0 {
 		t.Errorf("%d proposals staged, want 0", n)
+	}
+}
+
+// A member's PreSharedKey proposal with no psk_nonce is given a fresh
+// one, whether it is proposed or carried in a commit.
+func TestPSKNonceFilled(t *testing.T) {
+	a, b, _ := threeMember(t)
+	psk := func(PreSharedKeyID) ([]byte, error) { return []byte("secret"), nil }
+	a.client.PSK = psk
+	b.client.PSK = psk
+	n := a.CipherSuite.HashSize()
+
+	p := &Proposal{Type: ProposalTypePreSharedKey, PreSharedKey: &PreSharedKey{PSK: PreSharedKeyID{Type: PSKTypeExternal, PSKID: []byte("proposed")}}}
+	m, err := a.Propose(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := len(p.PreSharedKey.PSK.PSKNonce); got != n {
+		t.Errorf("proposed nonce is %d bytes, want %d", got, n)
+	}
+	handle(t, b, m)
+
+	short := &Proposal{Type: ProposalTypePreSharedKey, PreSharedKey: &PreSharedKey{PSK: PreSharedKeyID{Type: PSKTypeExternal, PSKID: []byte("short"), PSKNonce: make([]byte, n-1)}}}
+	if _, err := a.Propose(short); !errors.Is(err, ErrProposalList) {
+		t.Errorf("Propose with a short nonce: %v, want %v", err, ErrProposalList)
+	}
+
+	q := &Proposal{Type: ProposalTypePreSharedKey, PreSharedKey: &PreSharedKey{PSK: PreSharedKeyID{Type: PSKTypeExternal, PSKID: []byte("committed")}}}
+	a2, commit, _, err := a.Commit([]*Proposal{q})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := len(q.PreSharedKey.PSK.PSKNonce); got != n {
+		t.Errorf("committed nonce is %d bytes, want %d", got, n)
+	}
+	b2, _, err := b.Handle(send(t, commit))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(a2.EpochAuthenticator(), b2.EpochAuthenticator()) {
+		t.Error("members disagree")
 	}
 }

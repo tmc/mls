@@ -62,6 +62,11 @@ func (u ResumptionPSKUsage) String() string {
 // schedule. Type decides whether it names an external key or an epoch
 // of some group to resume from. The nonce makes each injection of the
 // same key distinct. See RFC 9420, Section 8.4.
+//
+// A caller may leave PSKNonce empty: [Group.Propose], [Group.Commit],
+// [Client.JoinExternal] and [ExternalClient.Propose] fill it with a
+// fresh nonce of the right length. A nonce of any other length is
+// rejected.
 type PreSharedKeyID struct {
 	Type PSKType
 

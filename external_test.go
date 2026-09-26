@@ -313,6 +313,7 @@ func TestJoinExternalPSK(t *testing.T) {
 		{name: "joiner lacks key", joiner: nil, member: both, psks: []PreSharedKeyID{id("k1", n)}, join: ErrUnknownPSK},
 		{name: "member lacks key", joiner: both, member: nil, psks: []PreSharedKeyID{id("k1", n)}, handle: ErrUnknownPSK},
 		{name: "secrets differ", joiner: both, member: map[string]string{"k1": "other"}, psks: []PreSharedKeyID{id("k1", n)}, handle: ErrBadConfirmationTag},
+		{name: "no nonce", joiner: both, member: both, psks: []PreSharedKeyID{{Type: PSKTypeExternal, PSKID: []byte("k1")}}},
 		{name: "short nonce", joiner: both, member: both, psks: []PreSharedKeyID{id("k1", n-1)}, join: ErrProposalList},
 		{name: "same key twice", joiner: both, member: both, psks: []PreSharedKeyID{id("k1", n), id("k1", n)}, join: ErrProposalList},
 	} {

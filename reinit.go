@@ -2,7 +2,6 @@ package mls
 
 import (
 	"bytes"
-	"crypto/rand"
 	"slices"
 )
 
@@ -101,19 +100,15 @@ func joinerCredentials(c *Client, members []*KeyPackage) []*Credential {
 // pre-shared key, which is how both reinitialization and branching
 // work.
 func (g *Group) resume(c *Client, groupID []byte, extensions Extensions, usage ResumptionPSKUsage, members []*KeyPackage) (*Group, *Message, error) {
-	cs := c.CipherSuite
 	next, err := c.NewGroup(groupID, extensions)
 	if err != nil {
 		return nil, nil, err
 	}
 	next.prior = g
 
-	// To avoid key reuse the nonce must be fresh, since the
-	// resumption key itself is reused by everyone joining.
-	nonce := make([]byte, cs.HashSize())
-	if _, err := rand.Read(nonce); err != nil {
-		return nil, nil, err
-	}
+	// Commit gives the proposal a fresh nonce, which keeps the
+	// resumption key, reused by everyone joining, from being
+	// injected twice alike.
 	proposals := []*Proposal{{
 		Type: ProposalTypePreSharedKey,
 		PreSharedKey: &PreSharedKey{PSK: PreSharedKeyID{
@@ -121,7 +116,6 @@ func (g *Group) resume(c *Client, groupID []byte, extensions Extensions, usage R
 			Usage:      usage,
 			PSKGroupID: g.Context.GroupID,
 			PSKEpoch:   g.Context.Epoch,
-			PSKNonce:   nonce,
 		}},
 	}}
 	for _, kp := range members {
