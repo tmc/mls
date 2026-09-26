@@ -459,3 +459,29 @@ func TestResumeTwoPSKs(t *testing.T) {
 		t.Errorf("Resume = %v, want %v", err, ErrNotResumed)
 	}
 }
+
+// A pre-shared key's nonce is as long as the suite's hash output
+// (RFC 9420, Section 8.4), in a welcome message as in a commit.
+func TestResumeShortNonce(t *testing.T) {
+	cs := testSuite()
+	_, _, _, ga, _, _ := setup(t, cs)
+	bob2 := newTestClient(t, cs, "bob")
+	_, msg, err := ga.Branch([]byte("subgroup"), nil, []*KeyPackage{bob2.KeyPackage})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := send(t, msg).Welcome
+	ref := w.Secrets[0].NewMember
+	secrets, err := w.GroupSecrets(ref, bob2.InitPriv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	secrets.PSKs[0].PSKNonce = secrets.PSKs[0].PSKNonce[:8]
+	w.Secrets = nil
+	if err := w.AddMember(ref, bob2.KeyPackage.InitKey, secrets); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := bob2.Resume(w, nil, ga); !errors.Is(err, ErrBadPSKNonce) {
+		t.Errorf("Resume = %v, want %v", err, ErrBadPSKNonce)
+	}
+}

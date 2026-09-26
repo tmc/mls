@@ -156,9 +156,15 @@ func (c *Client) join(w *Welcome, tree RatchetTree, old *Group) (*Group, error) 
 	}
 	// At most one pre-shared key links the group to one it
 	// reinitializes or branches. See RFC 9420, Section 12.4.3.1.
+	// Every nonce must be as long as the suite's hash output, as
+	// for a PreSharedKey proposal (Section 8.4).
 	var resumed *PreSharedKeyID
 	for i := range secrets.PSKs {
-		if id := &secrets.PSKs[i]; id.Type == PSKTypeResumption && id.Usage != ResumptionPSKUsageApplication {
+		id := &secrets.PSKs[i]
+		if len(id.PSKNonce) != cs.HashSize() {
+			return nil, fmt.Errorf("%w: %d bytes", ErrBadPSKNonce, len(id.PSKNonce))
+		}
+		if id.Type == PSKTypeResumption && id.Usage != ResumptionPSKUsageApplication {
 			if resumed != nil {
 				return nil, ErrNotResumed
 			}

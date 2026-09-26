@@ -126,6 +126,11 @@ var ErrBadConfirmationTag = errors.New("mls: confirmation tag does not verify")
 // supply.
 var ErrUnknownPSK = errors.New("mls: unknown pre-shared key")
 
+// ErrBadPSKNonce is reported for a welcome message naming a
+// pre-shared key whose nonce is not as long as the suite's hash
+// output. See RFC 9420, Section 8.4.
+var ErrBadPSKNonce = errors.New("mls: psk_nonce has the wrong length")
+
 // ErrUnknownProposal is reported for a proposal that a commit refers
 // to but that the member never received.
 var ErrUnknownProposal = errors.New("mls: unknown proposal")
