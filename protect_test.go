@@ -688,3 +688,38 @@ func TestHandleNil(t *testing.T) {
 		t.Errorf("Handle(nil) = %v, %v, want nil, %v", g, err, ErrNotForGroup)
 	}
 }
+
+// A message built in Go rather than decoded may leave out the proposal
+// or commit its content type names. Handle must reject it, not panic.
+func TestHandleHollow(t *testing.T) {
+	a, _, _ := threeMember(t)
+	for _, tt := range []struct {
+		name     string
+		sender   SenderType
+		typ      ContentType
+		proposal *Proposal
+	}{
+		{"external proposal", SenderTypeExternal, ContentTypeProposal, nil},
+		{"new member proposal", SenderTypeNewMemberProposal, ContentTypeProposal, nil},
+		{"new member add", SenderTypeNewMemberProposal, ContentTypeProposal, &Proposal{Type: ProposalTypeAdd}},
+		{"external commit", SenderTypeNewMemberCommit, ContentTypeCommit, nil},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			content := FramedContent{
+				GroupID:     a.Context.GroupID,
+				Epoch:       a.Context.Epoch,
+				Sender:      Sender{Type: tt.sender},
+				ContentType: tt.typ,
+				Proposal:    tt.proposal,
+			}
+			m := &Message{
+				Version:       a.Context.Version,
+				WireFormat:    WireFormatPublicMessage,
+				PublicMessage: &PublicMessage{Content: content},
+			}
+			if g, _, err := a.Handle(m); err == nil || g != nil {
+				t.Errorf("Handle = %v, %v, want an error", g, err)
+			}
+		})
+	}
+}

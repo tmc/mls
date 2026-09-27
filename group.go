@@ -391,7 +391,7 @@ func (g *Group) Unprotect(m *Message) (*AuthenticatedContent, error) {
 		// An external commit is signed by the joiner, whose key
 		// is in the leaf node of the update path it carries.
 		// See RFC 9420, Section 6.1.
-		if !public || c.Content.ContentType != ContentTypeCommit || c.Content.Commit.Path == nil {
+		if !public || c.Content.ContentType != ContentTypeCommit || c.Content.Commit == nil || c.Content.Commit.Path == nil {
 			return nil, ErrBadExternalCommit
 		}
 		key = c.Content.Commit.Path.LeafNode.SignatureKey
@@ -399,7 +399,7 @@ func (g *Group) Unprotect(m *Message) (*AuthenticatedContent, error) {
 		// A party outside the group signs with the key the
 		// group provisioned for it, and may send only the
 		// proposal types Section 12.1.8 allows.
-		if !public || c.Content.ContentType != ContentTypeProposal || !externalProposalType(c.Content.Proposal.Type) {
+		if !public || c.Content.ContentType != ContentTypeProposal || c.Content.Proposal == nil || !externalProposalType(c.Content.Proposal.Type) {
 			return nil, ErrBadExternalSender
 		}
 		s, err := g.externalSender(c.Content.Sender.SenderIndex)
@@ -411,10 +411,11 @@ func (g *Group) Unprotect(m *Message) (*AuthenticatedContent, error) {
 		// A client proposing its own addition signs with the
 		// key in the key package the proposal carries, which
 		// the group has no other way to know.
-		if !public || c.Content.ContentType != ContentTypeProposal || c.Content.Proposal.Type != ProposalTypeAdd {
+		p := c.Content.Proposal
+		if !public || c.Content.ContentType != ContentTypeProposal || p == nil || p.Type != ProposalTypeAdd || p.Add == nil {
 			return nil, ErrBadExternalSender
 		}
-		key = c.Content.Proposal.Add.KeyPackage.LeafNode.SignatureKey
+		key = p.Add.KeyPackage.LeafNode.SignatureKey
 	default:
 		return nil, ErrNotMember
 	}
