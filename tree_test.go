@@ -1,7 +1,7 @@
 package mls
 
-//go:generate curl -sSfo testdata/tree-validation.json https://raw.githubusercontent.com/mlswg/mls-implementations/main/test-vectors/tree-validation.json
-//go:generate curl -sSfo testdata/tree-operations.json https://raw.githubusercontent.com/mlswg/mls-implementations/main/test-vectors/tree-operations.json
+//go:generate curl -sSfo testdata/tree-validation.json https://raw.githubusercontent.com/mlswg/mls-implementations/cfd450286d1bfd9cd2519b95c80f9771f94a5b1a/test-vectors/tree-validation.json
+//go:generate curl -sSfo testdata/tree-operations.json https://raw.githubusercontent.com/mlswg/mls-implementations/cfd450286d1bfd9cd2519b95c80f9771f94a5b1a/test-vectors/tree-operations.json
 
 import (
 	"bytes"

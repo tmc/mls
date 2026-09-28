@@ -1,6 +1,6 @@
 package mls
 
-//go:generate curl -sSfo testdata/tree-math.json https://raw.githubusercontent.com/mlswg/mls-implementations/main/test-vectors/tree-math.json
+//go:generate curl -sSfo testdata/tree-math.json https://raw.githubusercontent.com/mlswg/mls-implementations/cfd450286d1bfd9cd2519b95c80f9771f94a5b1a/test-vectors/tree-math.json
 
 import "testing"
 

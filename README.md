@@ -79,8 +79,9 @@ pass: `messages`, `deserialization`, `tree-math`, `crypto-basics`,
 `message-protection`, `tree-operations`, `tree-validation`, `welcome`,
 `treekem`, `passive-client-welcome`, `passive-client-random`, and
 `passive-client-handling-commit`, on all seven cipher suites.
-The vector files are vendored in `testdata`; `go generate ./...`
-refreshes them.
+The vector files are vendored in `testdata`, from mls-implementations
+commit cfd450286d1b, the one the interop harness uses; `go generate ./...`
+fetches them again from that commit.
 
 The wire format is fuzzed. `FuzzMessage`, `FuzzKeyPackage`,
 `FuzzRatchetTree`, `FuzzWelcome`, `FuzzGroupInfo` and `FuzzProposal`

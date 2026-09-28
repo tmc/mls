@@ -1,8 +1,8 @@
 package mls
 
-//go:generate curl -sSfo testdata/key-schedule.json https://raw.githubusercontent.com/mlswg/mls-implementations/main/test-vectors/key-schedule.json
-//go:generate curl -sSfo testdata/psk_secret.json https://raw.githubusercontent.com/mlswg/mls-implementations/main/test-vectors/psk_secret.json
-//go:generate curl -sSfo testdata/transcript-hashes.json https://raw.githubusercontent.com/mlswg/mls-implementations/main/test-vectors/transcript-hashes.json
+//go:generate curl -sSfo testdata/key-schedule.json https://raw.githubusercontent.com/mlswg/mls-implementations/cfd450286d1bfd9cd2519b95c80f9771f94a5b1a/test-vectors/key-schedule.json
+//go:generate curl -sSfo testdata/psk_secret.json https://raw.githubusercontent.com/mlswg/mls-implementations/cfd450286d1bfd9cd2519b95c80f9771f94a5b1a/test-vectors/psk_secret.json
+//go:generate curl -sSfo testdata/transcript-hashes.json https://raw.githubusercontent.com/mlswg/mls-implementations/cfd450286d1bfd9cd2519b95c80f9771f94a5b1a/test-vectors/transcript-hashes.json
 
 import (
 	"bytes"

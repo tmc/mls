@@ -1,8 +1,8 @@
 package mls
 
-//go:generate curl -sSfo testdata/passive-client-welcome.json https://raw.githubusercontent.com/mlswg/mls-implementations/main/test-vectors/passive-client-welcome.json
-//go:generate curl -sSfo testdata/passive-client-random.json https://raw.githubusercontent.com/mlswg/mls-implementations/main/test-vectors/passive-client-random.json
-//go:generate curl -sSfo testdata/passive-client-handling-commit.json https://raw.githubusercontent.com/mlswg/mls-implementations/main/test-vectors/passive-client-handling-commit.json
+//go:generate curl -sSfo testdata/passive-client-welcome.json https://raw.githubusercontent.com/mlswg/mls-implementations/cfd450286d1bfd9cd2519b95c80f9771f94a5b1a/test-vectors/passive-client-welcome.json
+//go:generate curl -sSfo testdata/passive-client-random.json https://raw.githubusercontent.com/mlswg/mls-implementations/cfd450286d1bfd9cd2519b95c80f9771f94a5b1a/test-vectors/passive-client-random.json
+//go:generate curl -sSfo testdata/passive-client-handling-commit.json https://raw.githubusercontent.com/mlswg/mls-implementations/cfd450286d1bfd9cd2519b95c80f9771f94a5b1a/test-vectors/passive-client-handling-commit.json
 
 import (
 	"bytes"
