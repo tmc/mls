@@ -1,9 +1,11 @@
 // Package ed448 implements the Ed448 signature algorithm of RFC 8032,
 // Section 5.2, in its pure form (not Ed448ph).
 //
-// Private-key operations run in constant time. The field arithmetic
-// and scalar reduction are ported from github.com/cloudflare/circl;
-// see the LICENSE file.
+// Private-key operations run in constant time. The point arithmetic
+// follows RFC 8032, Section 5.2.4. The scalar arithmetic in scalar.go
+// is ported from github.com/cloudflare/circl/ecc/goldilocks (v1.6.4),
+// and the field arithmetic is package fp448, a port of circl's
+// math/fp448; see the LICENSE file.
 package ed448
 
 import (
