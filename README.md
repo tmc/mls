@@ -117,7 +117,8 @@ cache-timing signal of the table-driven AES the standard library
 falls back to on a CPU without AES instructions. On such a CPU prefer
 a ChaCha20-Poly1305 cipher suite.
 
-Report a vulnerability by opening an issue.
+Report a vulnerability privately, not in an issue; see
+[SECURITY.md](SECURITY.md).
 
 [RFC 9420]: https://www.rfc-editor.org/rfc/rfc9420.html
 [test vectors]: https://github.com/mlswg/mls-implementations
