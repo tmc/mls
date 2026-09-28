@@ -1,6 +1,9 @@
 // Package hpkex448 implements HPKE (RFC 9180) in base mode with the
 // KEM DHKEM(X448, HKDF-SHA512) and the KDF HKDF-SHA512, the HPKE of
 // MLS cipher suites 4 and 6, which crypto/hpke does not provide.
+//
+// Delete this package, and use crypto/hpke, once crypto/hpke provides
+// DHKEM(X448, HKDF-SHA512).
 package hpkex448
 
 import (

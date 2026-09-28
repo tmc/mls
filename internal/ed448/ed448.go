@@ -6,6 +6,9 @@
 // is ported from github.com/cloudflare/circl/ecc/goldilocks (v1.6.4),
 // and the field arithmetic is package fp448, a port of circl's
 // math/fp448; see the LICENSE file.
+//
+// Delete this package once the standard library or golang.org/x/crypto
+// provides Ed448.
 package ed448
 
 import (

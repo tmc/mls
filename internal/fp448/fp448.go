@@ -8,6 +8,9 @@
 // It is a port of github.com/cloudflare/circl/math/fp448 (v1.6.4),
 // generic implementation only, with elements held as seven 64-bit
 // limbs instead of bytes.
+//
+// Delete this package when packages x448 and ed448, its only users,
+// are deleted.
 package fp448
 
 import (

@@ -1,5 +1,8 @@
 // Package x448 implements the X448 Diffie-Hellman function of
 // RFC 7748, Section 5, in constant time.
+//
+// Delete this package once the standard library or golang.org/x/crypto
+// provides X448.
 package x448
 
 import (
