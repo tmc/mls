@@ -93,6 +93,15 @@ value it is checked against.
 
     go test -fuzz FuzzMessage
 
+So is the group's evolution. `FuzzGroup`, in the separate module
+`groupfuzz`, runs several members through sequences of proposals,
+commits, joins and application messages, delivered late and in the
+order a delivery service would, and checks after each step that the
+members in the latest epoch agree on its group context, tree and
+secrets.
+
+    cd groupfuzz && go test -fuzz FuzzGroup
+
 ## Security
 
 This package has not been audited. It implements RFC 9420 and passes

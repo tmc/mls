@@ -13,6 +13,9 @@ jobs:
       - run: go test -race ./...
       - name: gofmt
         run: test -z "$(gofmt -l .)"
+      - name: groupfuzz
+        working-directory: groupfuzz
+        run: go vet ./... && go test -short ./...
 
   fuzz:
     runs-on: ubuntu-latest
@@ -24,6 +27,12 @@ jobs:
         include:
           - target: FuzzCredential
             pkg: ./multicred
+          - target: FuzzGroup
+            pkg: .
+            dir: groupfuzz
+    defaults:
+      run:
+        working-directory: ${{ matrix.dir || '.' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
