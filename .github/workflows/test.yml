@@ -17,11 +17,18 @@ jobs:
   fuzz:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
-        target: [FuzzMLSMessage, FuzzKeyPackage, FuzzRatchetTree, FuzzWelcome, FuzzGroupInfo, FuzzProposal]
+        target: [FuzzMessage, FuzzKeyPackage, FuzzRatchetTree, FuzzWelcome, FuzzGroupInfo, FuzzProposal, FuzzProposalList, FuzzTreeVerify, FuzzUnprotect]
+        pkg: [.]
+        include:
+          - target: FuzzCredential
+            pkg: ./multicred
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version: '1.27'
-      - run: go test -run ^$ -fuzz ${{ matrix.target }} -fuzztime 2m
+      - name: check the target exists
+        run: go test -list '^${{ matrix.target }}$' ${{ matrix.pkg }} | grep -qx '${{ matrix.target }}'
+      - run: go test -run '^$' -fuzz '^${{ matrix.target }}$' -fuzztime 2m ${{ matrix.pkg }}
