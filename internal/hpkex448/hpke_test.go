@@ -1,5 +1,7 @@
 package hpkex448
 
+//go:generate go run gen_vectors.go
+
 import (
 	"bytes"
 	"encoding/hex"
@@ -26,7 +28,8 @@ func (h *hexBytes) UnmarshalJSON(b []byte) error {
 // TestVectors runs the DHKEM(X448, HKDF-SHA512), HKDF-SHA512 base-mode
 // vectors of the CFRG HPKE draft repository, which RFC 9180,
 // Appendix A, abridges. testdata/rfc9180-x448.json keeps, of each
-// vector, the encryptions at sequence numbers 0, 1, 255 and 256.
+// vector, the encryptions at sequence numbers 0, 1, 255 and 256;
+// gen_vectors.go writes it from the repository at commit b1f7cb0cdeab.
 func TestVectors(t *testing.T) {
 	b, err := os.ReadFile("testdata/rfc9180-x448.json")
 	if err != nil {
