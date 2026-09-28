@@ -251,8 +251,6 @@ func TestTooManyProposals(t *testing.T) {
 		}
 	}
 	stageUpdate(t, a, b)
-	// An update that supersedes a staged one adds nothing.
-	stageUpdate(t, a, b)
 	if n := len(a.proposals); n != maxSenderProposals+1 {
 		t.Errorf("%d proposals staged, want %d", n, maxSenderProposals+1)
 	}

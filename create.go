@@ -302,6 +302,10 @@ func (g *Group) staged(extra []*Proposal, from Sender) ([]*AuthenticatedContent,
 	for _, ref := range refs {
 		c := g.proposals[ref]
 		p := proposal{c.Content.Proposal, c.Content.Sender}
+		// Of a leaf's updates, only the latest is committed.
+		if i, ok := touchedLeaf(p.Proposal, p.from); ok && p.Type == ProposalTypeUpdate && g.updated[i] != ref {
+			continue
+		}
 		if p.Type != ProposalTypeRemove && tree == nil {
 			tree = g.Tree.Clone()
 			for i := range l.removed {

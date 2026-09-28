@@ -27,26 +27,58 @@ func stageUpdate(t *testing.T, a, b *Group) *LeafNode {
 	return leaf
 }
 
-// A member that rotates twice in one epoch supersedes its own first
-// update. Carrying both would cover one leaf twice, which Section
-// 12.2 forbids, and nothing outside the package can drop either one.
-func TestStagedUpdateSupersedes(t *testing.T) {
+// A member that rotates twice in one epoch has both updates
+// remembered, and a commit carries only the later one: carrying both
+// would cover one leaf twice, which Section 12.2 forbids.
+func TestStagedUpdateLatest(t *testing.T) {
 	a, b, _ := threeMember(t)
 	stageUpdate(t, a, b)
 	second := stageUpdate(t, a, b)
-	if n := len(a.proposals); n != 1 {
-		t.Errorf("after two updates from one leaf, %d staged, want 1", n)
+	if n := len(a.proposals); n != 2 {
+		t.Errorf("after two updates from one leaf, %d staged, want 2", n)
 	}
 	a2, msg, _, err := a.Commit(nil)
 	if err != nil {
 		t.Fatalf("commit: %v", err)
 	}
 	if got := a2.Tree.Leaf(b.Index).EncryptionKey; !bytes.Equal(got, second.EncryptionKey) {
-		t.Error("the commit applied the superseded update, not the later one")
+		t.Error("the commit applied the earlier update, not the later one")
 	}
 	// The proposer must still be able to follow it.
 	if _, _, err := b.Handle(send(t, msg)); err != nil {
 		t.Errorf("the proposer cannot follow its own update: %v", err)
+	}
+}
+
+// Section 12.2 leaves the choice between a leaf's updates to the
+// committer, so a commit that carries the earlier of two must be
+// followed too, by the proposer and by a member that saw both. The
+// proposer once forgot its first update when it sent the second, and
+// a commit from a member that had seen only the first was then one it
+// could not process.
+func TestStagedUpdateEarlier(t *testing.T) {
+	a, b, c := threeMember(t)
+	leaf, encPriv, _ := rotate(t, b)
+	m, err := b.ProposeUpdate(leaf, encPriv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handle(t, c, m)
+	handle(t, a, m)
+	stageUpdate(t, a, b)
+	// c has seen only the first update, and commits it.
+	_, msg, _, err := c.Commit(nil)
+	if err != nil {
+		t.Fatalf("commit: %v", err)
+	}
+	for _, g := range []*Group{a, b} {
+		g2, _, err := g.Handle(send(t, msg))
+		if err != nil {
+			t.Fatalf("leaf %d: %v", g.Index, err)
+		}
+		if got := g2.Tree.Leaf(b.Index).EncryptionKey; !bytes.Equal(got, leaf.EncryptionKey) {
+			t.Errorf("leaf %d: the commit did not apply the earlier update", g.Index)
+		}
 	}
 }
 

@@ -105,7 +105,7 @@ type Group struct {
 	interim    []byte // interim transcript hash
 	keys       *secretTree
 	proposals  map[string]*AuthenticatedContent // by proposal reference
-	updated    map[LeafIndex]string             // references of the staged updates, by leaf
+	updated    map[LeafIndex]string             // reference of each leaf's latest staged update
 	updates    map[string][]byte                // encryption keys of one's own updates, by public key
 	resumption map[uint64][]byte                // resumption PSKs, by epoch
 	prior      *Group                           // the group this one was resumed from
@@ -536,11 +536,11 @@ func (g *Group) Handle(m *Message) (*Group, *AuthenticatedContent, error) {
 // maxProposals proposals are remembered in one epoch, and at most
 // maxSenderProposals from any one sender.
 //
-// A member that rotates its keys twice in one epoch supersedes its
-// own earlier update: only the later one is remembered. RFC 9420,
-// Section 12.2 allows a commit to cover at most one update for any
-// one leaf, and the order the proposals arrived in is known here and
-// nowhere else, so this is where the choice between them belongs.
+// A member that rotates its keys twice in one epoch sends two
+// updates, and both are remembered. RFC 9420, Section 12.2 allows a
+// commit to cover at most one update for any one leaf but leaves the
+// choice to the committer, so a commit from another member may carry
+// either. This group's own commits carry the later one.
 func (g *Group) AddProposal(c *AuthenticatedContent) error {
 	if c.Content.ContentType != ContentTypeProposal {
 		return ErrNotProposal
@@ -575,22 +575,14 @@ func (g *Group) AddProposal(c *AuthenticatedContent) error {
 	if _, ok := g.proposals[ref]; ok {
 		return nil
 	}
-	i, update := touchedLeaf(c.Content.Proposal, c.Content.Sender)
-	update = update && c.Content.Proposal.Type == ProposalTypeUpdate
-	superseded, ok := g.updated[i]
-	ok = ok && update
-	if !ok {
-		if len(g.proposals) >= maxProposals {
-			return ErrTooManyProposals
-		}
-		if g.sentBy(c.Content.Sender) >= maxSenderProposals {
-			return fmt.Errorf("%w: from one sender", ErrTooManyProposals)
-		}
+	if len(g.proposals) >= maxProposals {
+		return ErrTooManyProposals
 	}
-	if update {
-		if ok {
-			delete(g.proposals, superseded)
-		}
+	if g.sentBy(c.Content.Sender) >= maxSenderProposals {
+		return fmt.Errorf("%w: from one sender", ErrTooManyProposals)
+	}
+	i, update := touchedLeaf(c.Content.Proposal, c.Content.Sender)
+	if update && c.Content.Proposal.Type == ProposalTypeUpdate {
 		if g.updated == nil {
 			g.updated = make(map[LeafIndex]string)
 		}
