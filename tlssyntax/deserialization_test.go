@@ -1,4 +1,4 @@
-package tlssyntax_test
+package tlssyntax
 
 //go:generate curl -sSfo testdata/deserialization.json https://raw.githubusercontent.com/mlswg/mls-implementations/main/test-vectors/deserialization.json
 
@@ -8,9 +8,13 @@ import (
 	"encoding/json"
 	"os"
 	"testing"
-
-	"github.com/tmc/mls/tlssyntax"
 )
+
+// maxBodyVector is the longest body TestDeserializationVectors builds.
+// The vectors go up to MaxVectorLen, and a 1 GiB body, copied while
+// decoding and encoding, costs several gigabytes, more than a CI
+// runner has under the race detector.
+const maxBodyVector = 1 << 16
 
 // TestDeserializationVectors checks the variable-length header of
 // RFC 9420, Section 2.1.2 against the working group's vectors, at
@@ -37,11 +41,30 @@ func TestDeserializationVectors(t *testing.T) {
 			t.Fatalf("%s: bad hex: %v", vec.Header, err)
 		}
 
+		// The header alone must decode to the length, using all of
+		// its bytes, and the length must encode to the header.
+		var n uint64
+		if err := Unmarshal(header, UnmarshalerFunc(func(r *Reader) {
+			n = r.ReadVarint()
+		})); err != nil {
+			t.Errorf("%s: Unmarshal: %v", vec.Header, err)
+			continue
+		}
+		if n != uint64(vec.Length) {
+			t.Errorf("%s: decoded length %d, want %d", vec.Header, n, vec.Length)
+		}
+		if got := appendVarint(nil, uint64(vec.Length)); !bytes.Equal(got, header) {
+			t.Errorf("length %d encoded as %x, want %s", vec.Length, got, vec.Header)
+		}
+		if vec.Length > maxBodyVector {
+			continue
+		}
+
 		// Decoding the header and the body it announces must
 		// consume exactly the vector's length of bytes.
 		body := bytes.Repeat([]byte{'x'}, vec.Length)
 		var got []byte
-		if err := tlssyntax.Unmarshal(append(header, body...), tlssyntax.UnmarshalerFunc(func(r *tlssyntax.Reader) {
+		if err := Unmarshal(append(header, body...), UnmarshalerFunc(func(r *Reader) {
 			got = r.ReadOpaque()
 		})); err != nil {
 			t.Errorf("%s: Unmarshal: %v", vec.Header, err)
@@ -52,7 +75,7 @@ func TestDeserializationVectors(t *testing.T) {
 		}
 
 		// Encoding a body of that length must reproduce the header.
-		enc, err := tlssyntax.Marshal(tlssyntax.MarshalerFunc(func(w *tlssyntax.Writer) {
+		enc, err := Marshal(MarshalerFunc(func(w *Writer) {
 			w.WriteOpaque(body)
 		}))
 		if err != nil {
