@@ -31,4 +31,19 @@ jobs:
           go-version: '1.27'
       - name: check the target exists
         run: go test -list '^${{ matrix.target }}$' ${{ matrix.pkg }} | grep -qx '${{ matrix.target }}'
-      - run: go test -run '^$' -fuzz '^${{ matrix.target }}$' -fuzztime 2m ${{ matrix.pkg }}
+      # Carry each target's generated corpus from run to run. The key
+      # is new every run, so every run saves; restore-keys picks up the
+      # latest save for the target.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/go-build/fuzz
+          key: fuzz-${{ matrix.target }}-${{ github.run_id }}
+          restore-keys: fuzz-${{ matrix.target }}-
+      - run: go test -run '^$' -fuzz '^${{ matrix.target }}$' -fuzztime 1m ${{ matrix.pkg }}
+      # A failing input is written to testdata/fuzz in the checkout.
+      # Keep it, to commit as a regression test.
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-failure-${{ matrix.target }}
+          path: '**/testdata/fuzz/'
