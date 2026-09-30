@@ -7,8 +7,10 @@ close.
 
 ## Supported Versions
 
-There are no tagged releases yet. Fixes go to the latest commit on
-`main`.
+The module is at v0, so its API may still change between minor
+versions. Security fixes land on `main` and are released as a patch
+to the latest minor version, currently v0.1.x; earlier minor versions
+do not receive fixes.
 
 ## Reporting a Vulnerability
 

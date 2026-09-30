@@ -6,6 +6,8 @@ Package mls implements the Messaging Layer Security protocol,
 
     go get github.com/tmc/mls
 
+It requires Go 1.27 or later.
+
 `tlssyntax` implements the TLS presentation language as MLS extends it:
 optional values, and vectors with variable-size length headers. The
 `mls` package defines the protocol's structures on top of it, along
